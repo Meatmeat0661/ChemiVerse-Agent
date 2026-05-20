@@ -1,0 +1,27 @@
+# Copy to config.yaml and adjust paths for your machine.
+
+data:
+  # ChemiVerse 数据库（也可用 data/molecules.json 做本地副本）
+  molecules_path: "E:/大学/学术项目/Agent-ChemiVerse/数据库/chemiverse_species.json"
+  reactions_path: "E:/大学/学术项目/Agent-ChemiVerse/数据库/chemiverse_reactions.json"
+
+westlake:
+  base_url: ""
+  api_key: "not-needed"
+  model: "westlake"
+  timeout_seconds: 120
+
+nautilus:
+  # westlake-tutorial 根目录（含 example_simulation/）
+  tutorial_root: "E:/大学/学术项目/Agent-ChemiVerse/westlake-tutorial"
+  script: "westlake/examples/run_nautilus_network.py"
+  plot_script: "backend/scripts/plot_westlake.py"
+  default_sim_dir: "example_simulation"
+  default_species: "CO,CH3OH,CH3OCH3"
+  default_plot_mode: "both"   # combined | separate | both
+  outputs_dir: "outputs"
+  python: "python"
+
+server:
+  host: "127.0.0.1"
+  port: 8765

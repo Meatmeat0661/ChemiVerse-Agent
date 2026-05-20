@@ -1,0 +1,62 @@
+[
+  {
+    "key": "CR;N2>N;N",
+    "reactants": [
+      { "name": "N2", "num": 1, "is_special": false },
+      { "name": "CR", "num": 1, "is_special": true }
+    ],
+    "products": [
+      { "name": "N", "num": 2, "is_special": false }
+    ],
+    "reaction_type": "CR dissociation",
+    "params": [
+      {
+        "id": 0,
+        "alpha": 5.0,
+        "beta": 0.0,
+        "gamma": 0.0,
+        "formula": "CR dissociation",
+        "temp_min": null,
+        "temp_max": null,
+        "origin": ["KIDA"],
+        "comment": null
+      },
+      {
+        "id": 1,
+        "alpha": 1.3e-17,
+        "beta": 0.0,
+        "gamma": 19.5,
+        "formula": null,
+        "temp_min": 10.0,
+        "temp_max": 41000.0,
+        "origin": ["https://doi.org/10.1051/0004-6361/201628742"],
+        "comment": null
+      }
+    ]
+  },
+  {
+    "key": "CCH;CR>C;CH",
+    "reactants": [
+      { "name": "CCH", "num": 1, "is_special": false },
+      { "name": "CR", "num": 1, "is_special": true }
+    ],
+    "products": [
+      { "name": "C", "num": 1, "is_special": false },
+      { "name": "CH", "num": 1, "is_special": false }
+    ],
+    "reaction_type": "CR dissociation",
+    "params": [
+      {
+        "id": 0,
+        "alpha": 1.0,
+        "beta": 0.0,
+        "gamma": 0.0,
+        "formula": "CR dissociation",
+        "temp_min": null,
+        "temp_max": null,
+        "origin": ["KIDA"],
+        "comment": "示例反应，用于演示 CCH 检索"
+      }
+    ]
+  }
+]

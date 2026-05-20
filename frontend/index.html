@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>天体化学 Agent</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <h1>天体化学 Agent</h1>
+        <p class="subtitle">
+          查询分子物性与反应网络；运行 Westlake 化学演化并生成丰度曲线图。
+        </p>
+        <div id="health" class="health">检查服务状态…</div>
+      </header>
+
+      <main class="grid">
+        <section class="card">
+          <h2>分子查询</h2>
+          <form id="query-form">
+            <label for="query">查询（SMILES / key / 分子式）</label>
+            <input
+              id="query"
+              name="query"
+              type="text"
+              placeholder="例如 [C]#C 、 CCH 、 C2H"
+              autocomplete="off"
+              required
+            />
+            <div id="suggestions" class="suggestions hidden"></div>
+            <div class="row">
+              <label class="checkbox">
+                <input id="include-reactions" type="checkbox" checked />
+                包含相关反应
+              </label>
+              <label class="checkbox">
+                <input id="use-llm" type="checkbox" checked />
+                使用 Westlake LLM（可选）
+              </label>
+            </div>
+            <button type="submit">查询</button>
+          </form>
+          <article id="summary" class="summary muted">结果将显示在这里。</article>
+        </section>
+
+        <section class="card">
+          <h2>Westlake 演化 + 绘图</h2>
+          <form id="sim-form">
+            <label for="sim-dir">模拟目录（相对 tutorial_root）</label>
+            <input id="sim-dir" type="text" placeholder="example_simulation" />
+            <label for="plot-species">绘图物种（逗号分隔，需在 Nautilus 网络中）</label>
+            <input
+              id="plot-species"
+              type="text"
+              placeholder="CO,CH3OH,CH3OCH3"
+            />
+            <label for="plot-mode">出图方式</label>
+            <select id="plot-mode">
+              <option value="combined">合并一张图（多条曲线）</option>
+              <option value="separate">每个物种单独一张图</option>
+              <option value="both" selected>两种都要</option>
+            </select>
+            <div class="row">
+              <label class="checkbox">
+                <input id="use-evolution" type="checkbox" checked />
+                --use_evolution
+              </label>
+              <label class="checkbox">
+                <input id="plot-after-run" type="checkbox" checked />
+                运行后自动绘图
+              </label>
+            </div>
+            <div class="row">
+              <button type="button" id="preview-cmd" class="secondary">预览命令</button>
+              <button type="submit">运行模拟</button>
+              <button type="button" id="plot-only" class="secondary">仅绘图</button>
+            </div>
+          </form>
+          <pre id="sim-output" class="code muted">尚未运行。</pre>
+          <div id="plot-gallery" class="plot-gallery hidden">
+            <p class="gallery-title">Westlake 丰度演化图</p>
+            <div id="plot-cards" class="plot-cards"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

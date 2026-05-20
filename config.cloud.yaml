@@ -1,0 +1,19 @@
+# Streamlit Cloud / GitHub 部署用（数据库放在仓库 data/ 目录）
+
+data:
+  molecules_path: data/chemiverse_species.json
+  reactions_path: data/chemiverse_reactions.json
+
+westlake:
+  base_url: ""
+
+nautilus:
+  tutorial_root: "."
+  script: "westlake/examples/run_nautilus_network.py"
+  default_sim_dir: "example_simulation"
+  outputs_dir: outputs
+  python: python3
+
+server:
+  host: "0.0.0.0"
+  port: 8501

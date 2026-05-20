@@ -1,0 +1,189 @@
+from __future__ import annotations
+
+import subprocess
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from backend.config import ROOT, get_settings
+from backend.db.loader import AstroChemDatabase
+from backend.models import PlotRequest, QueryRequest, SimulationRequest
+from backend.services.agent import AstroChemAgent
+from backend.services.nautilus import NautilusRunner
+
+settings = get_settings()
+db = AstroChemDatabase(settings.data.molecules_path, settings.data.reactions_path)
+agent = AstroChemAgent(db)
+nautilus = NautilusRunner(settings.nautilus)
+FRONTEND = ROOT / "frontend"
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    try:
+        db.molecules  # preload
+        db.reactions
+    except FileNotFoundError:
+        pass
+    yield
+
+
+app = FastAPI(title="Astrochem Agent", version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/api/health")
+def health() -> dict[str, object]:
+    molecules_ok = settings.data.molecules_path.exists()
+    reactions_ok = settings.data.reactions_path.exists()
+    nautilus_ok = nautilus.script_path().exists()
+    return {
+        "status": "ok",
+        "molecules_path": str(settings.data.molecules_path),
+        "reactions_path": str(settings.data.reactions_path),
+        "molecules_loaded": molecules_ok,
+        "reactions_loaded": reactions_ok,
+        "tutorial_root": str(nautilus.tutorial_root()),
+        "nautilus_script": str(nautilus.script_path()),
+        "nautilus_ready": nautilus_ok,
+        "plot_script": str(nautilus.plotter.plot_script_path()),
+        "westlake_llm_configured": bool(settings.westlake.base_url),
+    }
+
+
+@app.post("/api/query")
+async def query_molecule(body: QueryRequest):
+    try:
+        return await agent.answer(
+            body.query,
+            include_reactions=body.include_reactions,
+            use_llm=body.use_llm,
+            westlake_settings=settings.westlake,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/molecules/search")
+def search_molecules(q: str = "", limit: int = 20):
+    q = q.strip().lower()
+    results = []
+    for molecule in db.molecules:
+        haystack = " ".join(
+            filter(
+                None,
+                [
+                    molecule.key,
+                    molecule.normal_formula,
+                    molecule.smiles,
+                    molecule.name,
+                    *molecule.empirical_formulae,
+                ],
+            )
+        ).lower()
+        if not q or q in haystack:
+            results.append(
+                {
+                    "key": molecule.key,
+                    "smiles": molecule.smiles,
+                    "normal_formula": molecule.normal_formula,
+                }
+            )
+        if len(results) >= limit:
+            break
+    return {"items": results}
+
+
+@app.post("/api/simulation/run")
+def run_simulation(body: SimulationRequest):
+    try:
+        species = body.species or None
+        if body.plot:
+            return nautilus.run_with_plot(
+                sim_dir=body.sim_dir,
+                use_evolution=body.use_evolution,
+                species=species,
+                plot_mode=body.plot_mode,
+                extra_args=body.extra_args,
+                timeout=3600,
+            )
+        return nautilus.run(
+            sim_dir=body.sim_dir,
+            use_evolution=body.use_evolution,
+            extra_args=body.extra_args,
+            timeout=3600,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail="Simulation timed out") from exc
+
+
+@app.post("/api/simulation/plot")
+def plot_simulation(body: PlotRequest):
+    try:
+        sim_dir = nautilus.simulation_dir(body.sim_dir)
+        pickle_path = sim_dir / "res.pickle"
+        if not pickle_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"No res.pickle in {sim_dir}. Run simulation first.",
+            )
+        species = body.species or None
+        return nautilus.plotter.plot(
+            sim_dir=sim_dir,
+            species=species,
+            run_id=body.run_id,
+            mode=body.plot_mode,  # type: ignore[arg-type]
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail="Plotting timed out") from exc
+
+
+OUTPUTS = settings.nautilus.outputs_dir
+if not OUTPUTS.is_absolute():
+    OUTPUTS = ROOT / OUTPUTS
+OUTPUTS.mkdir(parents=True, exist_ok=True)
+
+
+@app.get("/api/outputs/{run_id}/{filename}")
+def get_output_image(run_id: str, filename: str):
+    if ".." in run_id or ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    path = OUTPUTS / run_id / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(path, media_type="image/png")
+
+
+@app.get("/api/simulation/preview")
+def preview_simulation(sim_dir: str | None = None, use_evolution: bool = True):
+    return {
+        "command": nautilus.build_command(sim_dir=sim_dir, use_evolution=use_evolution),
+        "cwd": str(nautilus.tutorial_root()),
+        "sim_dir": str(nautilus.simulation_dir(sim_dir)),
+    }
+
+
+@app.post("/api/admin/reload")
+def reload_database():
+    db.reload()
+    return {"status": "reloaded"}
+
+
+if FRONTEND.exists():
+    app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
+
+    @app.get("/")
+    def index():
+        return FileResponse(FRONTEND / "index.html")

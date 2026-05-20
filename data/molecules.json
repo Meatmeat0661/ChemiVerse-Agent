@@ -1,0 +1,31 @@
+[
+  {
+    "key": "CCH",
+    "atoms": { "C": 2, "H": 1 },
+    "smiles": "[C]#C",
+    "inchi": "InChI=1S/C2H/c1-2/h1H",
+    "name": null,
+    "normal_formula": "C2H",
+    "num_atoms": 3,
+    "ma": 25.03,
+    "charge": 0,
+    "num_rings": 0,
+    "empirical_formulae": ["C2H", "CCH"],
+    "desorption_energy": [],
+    "observations": [
+      {
+        "id": 0,
+        "source": "W3",
+        "origin": ["https://ui.adsabs.harvard.edu/abs/1974ApJ...193L.115T/abstract"]
+      },
+      {
+        "id": 15,
+        "source": "TMC-1",
+        "origin": [
+          "https://ui.adsabs.harvard.edu/abs/1980ApJ...239..844W/abstract",
+          "https://ui.adsabs.harvard.edu/abs/1985A%26A...147L..25C/abstract"
+        ]
+      }
+    ]
+  }
+]
