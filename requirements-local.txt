@@ -1,0 +1,12 @@
+# 本地完整功能：FastAPI 旧版 + Westlake 演化模拟
+-r requirements.txt
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+matplotlib>=3.8.0
+
+# Westlake 化学演化（仅本地需要，体积大）
+# 仓库: https://gitee.com/yqiuu/astro-westlake
+# torch>=2.0
+# pip install git+https://gitee.com/yqiuu/astro-westlake.git
+# 或本地: pip install -e E:/path/to/westlake-tutorial/westlake

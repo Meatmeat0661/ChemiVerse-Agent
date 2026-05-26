@@ -14,8 +14,8 @@ streamlit run streamlit_app.py
 
 **别的网络的人也能用**：
 
-- **Streamlit Cloud（推荐，免服务器）**：按 [STREAMLIT_CLOUD.md](STREAMLIT_CLOUD.md) 推到 GitHub 一键部署  
-- 自建服务器 / 隧道：见 [STREAMLIT.md](STREAMLIT.md)
+- **Streamlit Cloud + 远程模拟 API**（访客不装 westlake）：[STREAMLIT_CLOUD.md](STREAMLIT_CLOUD.md) + [DEPLOY_SIMULATION_SERVER.md](DEPLOY_SIMULATION_SERVER.md)
+- 自建 Streamlit / 隧道：见 [STREAMLIT.md](STREAMLIT.md)
 
 ## FastAPI 版（可选）
 

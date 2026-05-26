@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +20,12 @@ db = AstroChemDatabase(settings.data.molecules_path, settings.data.reactions_pat
 agent = AstroChemAgent(db)
 nautilus = NautilusRunner(settings.nautilus)
 FRONTEND = ROOT / "frontend"
+SIMULATION_API_KEY = os.getenv("SIMULATION_API_KEY", "")
+
+
+def verify_simulation_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    if SIMULATION_API_KEY and x_api_key != SIMULATION_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
 
 
 @asynccontextmanager
@@ -54,6 +61,7 @@ def health() -> dict[str, object]:
         "tutorial_root": str(nautilus.tutorial_root()),
         "nautilus_script": str(nautilus.script_path()),
         "nautilus_ready": nautilus_ok,
+        "simulation_api_key_required": bool(SIMULATION_API_KEY),
         "plot_script": str(nautilus.plotter.plot_script_path()),
         "westlake_llm_configured": bool(settings.westlake.base_url),
     }
@@ -102,7 +110,7 @@ def search_molecules(q: str = "", limit: int = 20):
     return {"items": results}
 
 
-@app.post("/api/simulation/run")
+@app.post("/api/simulation/run", dependencies=[Depends(verify_simulation_api_key)])
 def run_simulation(body: SimulationRequest):
     try:
         species = body.species or None
@@ -112,6 +120,7 @@ def run_simulation(body: SimulationRequest):
                 use_evolution=body.use_evolution,
                 species=species,
                 plot_mode=body.plot_mode,
+                include_images_base64=body.include_images_base64,
                 extra_args=body.extra_args,
                 timeout=3600,
             )
@@ -127,7 +136,7 @@ def run_simulation(body: SimulationRequest):
         raise HTTPException(status_code=504, detail="Simulation timed out") from exc
 
 
-@app.post("/api/simulation/plot")
+@app.post("/api/simulation/plot", dependencies=[Depends(verify_simulation_api_key)])
 def plot_simulation(body: PlotRequest):
     try:
         sim_dir = nautilus.simulation_dir(body.sim_dir)
@@ -143,6 +152,7 @@ def plot_simulation(body: PlotRequest):
             species=species,
             run_id=body.run_id,
             mode=body.plot_mode,  # type: ignore[arg-type]
+            include_images_base64=body.include_images_base64,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

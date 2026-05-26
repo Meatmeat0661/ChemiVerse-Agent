@@ -1,0 +1,15 @@
+[
+  {
+    "id": "nitrogen-default",
+    "title": "含氮分子演化（example_simulation）",
+    "description": "N2, NH3, HCN, H2CO · --use_evolution",
+    "species": ["N2", "NH3", "HCN", "H2CO"],
+    "images": [
+      {"label": "combined", "file": "data/plots/nitrogen-default/abundances.png"},
+      {"label": "N2", "file": "data/plots/nitrogen-default/N2.png"},
+      {"label": "NH3", "file": "data/plots/nitrogen-default/NH3.png"},
+      {"label": "HCN", "file": "data/plots/nitrogen-default/HCN.png"},
+      {"label": "H2CO", "file": "data/plots/nitrogen-default/H2CO.png"}
+    ]
+  }
+]

@@ -8,6 +8,8 @@ from typing import Literal
 
 from backend.config import NautilusSettings, ROOT
 
+from backend.services.plot_images import attach_image_base64
+
 PlotMode = Literal["combined", "separate", "both"]
 
 
@@ -88,6 +90,7 @@ class WestlakePlotter:
         run_id: str | None = None,
         mode: PlotMode | None = None,
         t_start: float | None = None,
+        include_images_base64: bool = False,
     ) -> dict[str, object]:
         script = self.plot_script_path()
         if not script.exists():
@@ -109,6 +112,8 @@ class WestlakePlotter:
             check=False,
         )
         images = self._collect_images(run_id, output_dir, plot_mode) if completed.returncode == 0 else []
+        if include_images_base64 and images:
+            images = attach_image_base64(images, output_dir)
         primary_url = images[0]["url"] if images else None
 
         return {

@@ -92,6 +92,7 @@ class NautilusRunner:
         use_evolution: bool = True,
         species: list[str] | None = None,
         plot_mode: str | None = None,
+        include_images_base64: bool = False,
         extra_args: list[str] | None = None,
         timeout: int | None = None,
     ) -> dict[str, object]:
@@ -124,6 +125,7 @@ class NautilusRunner:
             species=species,
             run_id=run_id,
             mode=plot_mode,  # type: ignore[arg-type]
+            include_images_base64=include_images_base64,
         )
         sim_result["plot"] = plot_result
         return sim_result

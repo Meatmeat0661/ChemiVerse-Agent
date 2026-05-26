@@ -19,6 +19,10 @@ class SimulationRequest(BaseModel):
         default="combined",
         description="combined: one figure; separate: one PNG per species; both",
     )
+    include_images_base64: bool = Field(
+        default=False,
+        description="Embed PNG as base64 in response (for remote Streamlit clients)",
+    )
     species: list[str] = Field(
         default_factory=list,
         description="Species to plot; empty uses config default_species",
@@ -30,6 +34,7 @@ class PlotRequest(BaseModel):
     sim_dir: str | None = None
     species: list[str] = Field(default_factory=list)
     plot_mode: str = "combined"
+    include_images_base64: bool = False
     run_id: str | None = None
 
 

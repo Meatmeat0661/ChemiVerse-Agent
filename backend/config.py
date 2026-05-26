@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 from pathlib import Path
 from typing import Any
 
@@ -63,12 +64,16 @@ def _merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 @lru_cache
 def get_settings() -> AppSettings:
+    # Streamlit Cloud 环境下优先使用相对路径配置，避免本机绝对路径导致加载失败。
+    is_cloud = os.getenv("STREAMLIT_RUNTIME_ENVIRONMENT") == "cloud"
     config_path = ROOT / "config.yaml"
-    if not config_path.exists():
-        cloud_path = ROOT / "config.cloud.yaml"
-        config_path = cloud_path if cloud_path.exists() else None
-    if config_path is None or not config_path.exists():
-        return AppSettings()
+    cloud_path = ROOT / "config.cloud.yaml"
+
+    if is_cloud:
+        config_path = cloud_path if cloud_path.exists() else config_path
+    else:
+        if not config_path.exists() and cloud_path.exists():
+            config_path = cloud_path
 
     with config_path.open(encoding="utf-8") as handle:
         raw = yaml.safe_load(handle) or {}

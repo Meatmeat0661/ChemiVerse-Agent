@@ -1,12 +1,11 @@
 # Streamlit Community Cloud 部署（公网链接）
 
-部署完成后，你会得到固定链接，例如：
+**重要：**
 
-`https://astrochem-agent-xxxx.streamlit.app`
+- **查分子/反应**：只需 JSON，访客不用装 westlake。
+- **演化图**：访客也不用装 westlake —— 需另有一台 **模拟 API 服务器**（见 [DEPLOY_SIMULATION_SERVER.md](DEPLOY_SIMULATION_SERVER.md)），在 Streamlit Secrets 里配置 `simulation_api.base_url`。
 
-**任何人** 有链接即可查分子/反应（无需安装 Python）。
-
-> 云端 **不支持** Westlake 化学演化模拟（算力与依赖限制），仅 **分子查询** 功能可用。
+部署完成后链接示例：`https://astrochem-agent-xxxx.streamlit.app`
 
 ---
 
