@@ -268,6 +268,26 @@ def simulation_api_config() -> tuple[str | None, str]:
     return (base, key) if base else (None, key)
 
 
+def simulation_admin_mode_enabled(on_cloud: bool) -> bool:
+    """Cloud 默认关闭实时模拟；管理员输入密钥后开启。"""
+    if not on_cloud:
+        return True
+    try:
+        block = st.secrets.get("admin", {})
+        admin_key = (block.get("simulation_key") or "").strip()
+    except Exception:
+        admin_key = ""
+    if not admin_key:
+        return False
+
+    st.sidebar.markdown("### 管理员模式")
+    token = st.sidebar.text_input("模拟管理员密钥", type="password", key="sim_admin_key")
+    enabled = token.strip() == admin_key
+    if enabled:
+        st.sidebar.success("实时模拟已开启（管理员）")
+    return enabled
+
+
 def _simulation_form(settings, default_species_key: str = "plot_species"):
     default_species = st.session_state.get(default_species_key, settings.nautilus.default_species)
     sim_dir = st.text_input("模拟目录", value=settings.nautilus.default_sim_dir)
@@ -275,20 +295,8 @@ def _simulation_form(settings, default_species_key: str = "plot_species"):
         "绘图物种（逗号分隔）",
         value=default_species if isinstance(default_species, str) else ",".join([default_species]),
     )
-    plot_mode = st.selectbox(
-        "出图方式",
-        options=["both", "combined", "separate"],
-        format_func=lambda x: {
-            "both": "合并图 + 每个物种单独一张",
-            "combined": "仅一张合并图",
-            "separate": "仅每个物种单独一张",
-        }[x],
-        index=(
-            ["both", "combined", "separate"].index(settings.nautilus.default_plot_mode)
-            if settings.nautilus.default_plot_mode in ("both", "combined", "separate")
-            else 1
-        ),
-    )
+    # 固定仅输出一张合并图，简化访客操作
+    plot_mode = "combined"
     use_evolution = st.checkbox("使用结构演化 (--use_evolution)", value=True)
     plot_after = st.checkbox("运行后自动绘图", value=True)
 
@@ -444,18 +452,23 @@ def show_plot_results(plot_data: dict, settings, api_base: str | None = None) ->
                 st.warning("图像不可用")
 
 
-def page_simulation_local(nautilus, settings) -> None:
+def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> None:
     st.header("Westlake 化学演化 + 绘图（本机）")
     st.caption("在本机安装 westlake 后直接计算")
 
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
     _show_simulation_preflight(nautilus, sim_dir or None)
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        run_sim = st.button("运行模拟", type="primary", key="local_run")
-    with col_b:
-        plot_only = st.button("仅绘图", key="local_plot")
+    if allow_run_sim:
+        col_a, col_b = st.columns(2)
+        with col_a:
+            run_sim = st.button("运行模拟", type="primary", key="local_run")
+        with col_b:
+            plot_only = st.button("仅绘图", key="local_plot")
+    else:
+        run_sim = False
+        plot_only = st.button("仅绘图", type="primary", key="local_plot")
+        st.info("当前仅开放“仅绘图”。")
 
     if run_sim:
         with st.spinner("Westlake 模拟运行中，可能需要数分钟…"):
@@ -519,7 +532,7 @@ def page_simulation_local(nautilus, settings) -> None:
         show_plot_results(plot_data, settings)
 
 
-def page_simulation_remote(api_base: str, api_key: str, settings) -> None:
+def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim: bool = True) -> None:
     from backend.services.simulation_api import RemoteSimulationClient
 
     st.header("Westlake 化学演化 + 绘图（远程）")
@@ -528,11 +541,16 @@ def page_simulation_remote(api_base: str, api_key: str, settings) -> None:
     client = RemoteSimulationClient(api_base, api_key=api_key)
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
 
-    col_a, col_b = st.columns(2)
-    with col_a:
-        run_sim = st.button("运行模拟", type="primary", key="remote_run")
-    with col_b:
-        plot_only = st.button("仅绘图", key="remote_plot")
+    if allow_run_sim:
+        col_a, col_b = st.columns(2)
+        with col_a:
+            run_sim = st.button("运行模拟", type="primary", key="remote_run")
+        with col_b:
+            plot_only = st.button("仅绘图", key="remote_plot")
+    else:
+        run_sim = False
+        plot_only = st.button("仅绘图", type="primary", key="remote_plot")
+        st.info("访客模式仅开放“仅绘图”；实时模拟为管理员功能。")
 
     if run_sim:
         with st.spinner("正在请求远程 Westlake 服务（可能数分钟）…"):
@@ -575,6 +593,7 @@ def page_simulation_remote(api_base: str, api_key: str, settings) -> None:
 def main() -> None:
     settings, db, agent, nautilus, on_cloud = load_resources()
     api_base, api_key = simulation_api_config()
+    admin_run_enabled = simulation_admin_mode_enabled(on_cloud)
 
     st.title("天体化学 Agent · ChemiVerse")
     if on_cloud:
@@ -602,11 +621,11 @@ def main() -> None:
             catalog and (nautilus is None or not nautilus.script_path().exists())
         )
         if api_base and not use_precomputed:
-            page_simulation_remote(api_base, api_key, settings)
+            page_simulation_remote(api_base, api_key, settings, allow_run_sim=admin_run_enabled)
         elif use_precomputed:
             page_simulation_unavailable()
         elif nautilus is not None:
-            page_simulation_local(nautilus, settings)
+            page_simulation_local(nautilus, settings, allow_run_sim=admin_run_enabled)
         else:
             page_simulation_unavailable()
 
