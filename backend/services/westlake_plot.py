@@ -115,7 +115,7 @@ class WestlakePlotter:
             cwd=str(ROOT),
             capture_output=True,
             text=True,
-            timeout=180,
+            timeout=900,
             check=False,
         )
         images = self._collect_images(run_id, output_dir, plot_mode) if completed.returncode == 0 else []

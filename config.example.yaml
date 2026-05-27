@@ -13,7 +13,7 @@ westlake:
 
 nautilus:
   # westlake-tutorial 根目录（含 example_simulation/）
-  tutorial_root: "E:/大学/学术项目/Agent-ChemiVerse/westlake-tutorial"
+  tutorial_root: "C:/Users/ROG/westlake-tutorial"
   script: "westlake/examples/run_nautilus_network.py"
   plot_script: "backend/scripts/plot_westlake.py"
   default_sim_dir: "example_simulation"

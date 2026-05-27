@@ -3,7 +3,7 @@
 
 $ErrorActionPreference = "Stop"
 $Py312 = "C:\Users\ROG\AppData\Local\Programs\Python\Python312\python.exe"
-$WestlakeTutorial = "E:\大学\学术项目\Agent-ChemiVerse\westlake-tutorial"
+$WestlakeTutorial = "C:\Users\ROG\westlake-tutorial"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 
 if (-not (Test-Path $Py312)) {

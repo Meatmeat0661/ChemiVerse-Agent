@@ -38,6 +38,7 @@ cd /opt/astrochem-agent
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-local.txt
+pip install -r requirements-westlake-sim.txt
 pip install torch
 pip install git+https://gitee.com/yqiuu/astro-westlake.git
 # 或: pip install -e /opt/westlake-tutorial/westlake

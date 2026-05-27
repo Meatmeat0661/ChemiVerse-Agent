@@ -1,0 +1,23 @@
+# 阿里云 / Linux 模拟 API 专用（复制到 /opt/astrochem-agent/config.yaml）
+# 模拟 API 可不加载 ChemiVerse 大库；分子查询走 Streamlit Cloud。
+
+data:
+  molecules_path: data/molecules.json
+  reactions_path: data/reactions.json
+
+westlake:
+  base_url: ""
+
+nautilus:
+  tutorial_root: "/opt/westlake-tutorial"
+  script: "westlake/examples/run_nautilus_network.py"
+  plot_script: "backend/scripts/plot_westlake.py"
+  default_sim_dir: "example_simulation"
+  default_species: "CO,CH3OH,CH3OCH3"
+  default_plot_mode: "both"
+  outputs_dir: "outputs"
+  python: "/opt/astrochem-agent/.venv/bin/python"
+
+server:
+  host: "0.0.0.0"
+  port: 8765
