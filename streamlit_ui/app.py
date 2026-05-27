@@ -33,8 +33,8 @@ def apply_starry_theme() -> None:
         """
 <style>
 :root {
-  --bg-start: #060914;
-  --bg-end: #0b1230;
+  --bg-start: #030611;
+  --bg-end: #071128;
   --card: rgba(16, 24, 54, 0.72);
   --card-border: rgba(132, 161, 255, 0.28);
   --text: #e8eeff;
@@ -72,9 +72,9 @@ h1, h2, h3, h4, h5, h6, p, label, span, li, div {
 [data-baseweb="input"] > div,
 [data-baseweb="select"] > div,
 textarea {
-  background: rgba(8, 14, 35, 0.88) !important;
+  background: rgba(34, 56, 112, 0.88) !important;
   color: var(--text) !important;
-  border: 1px solid rgba(120, 145, 232, 0.35) !important;
+  border: 1px solid rgba(156, 186, 255, 0.6) !important;
 }
 
 .stTextInput input, .stTextArea textarea {
@@ -88,6 +88,14 @@ textarea {
   border-radius: 10px;
   font-weight: 600;
   box-shadow: 0 8px 18px rgba(85, 118, 214, 0.32);
+}
+
+.stButton > button[kind="primary"] {
+  padding: 1rem 3.2rem !important;
+  min-height: 3.4rem;
+  font-size: 1.28rem;
+  letter-spacing: 0.05em;
+  border-radius: 12px;
 }
 
 .stButton > button:hover {
@@ -191,6 +199,12 @@ def _reaction_table(rows) -> None:
 
 def _species_list_from_text(text: str) -> list[str]:
     return [s.strip() for s in text.replace("，", ",").split(",") if s.strip()]
+
+
+def _plot_action_button(key: str) -> bool:
+    _, col, _ = st.columns([0.5, 4, 0.5])
+    with col:
+        return st.button("Plot", type="primary", use_container_width=True, key=key)
 
 
 def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) -> None:
@@ -528,8 +542,7 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
     _show_simulation_preflight(nautilus, sim_dir or None)
 
-    plot_only = st.button("Plot", type="primary", key="local_plot")
-    st.info("Run Simulation is hidden; plotting uses existing result files only.")
+    plot_only = _plot_action_button("local_plot")
 
     if plot_only:
         with st.spinner("Plotting..."):
@@ -559,7 +572,7 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
     client = RemoteSimulationClient(api_base, api_key=api_key)
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
 
-    plot_only = st.button("Plot", type="primary", key="remote_plot")
+    plot_only = _plot_action_button("remote_plot")
 
     if plot_only:
         with st.spinner("Plotting..."):
