@@ -4,7 +4,12 @@ import subprocess
 from pathlib import Path
 
 from backend.config import NautilusSettings, ROOT
-from backend.services.nautilus_env import probe_westlake, resolve_python
+from backend.services.nautilus_env import (
+    probe_numpy_for_westlake,
+    probe_plot_deps,
+    probe_westlake,
+    resolve_python,
+)
 from backend.services.westlake_plot import WestlakePlotter
 
 
@@ -16,15 +21,29 @@ class NautilusRunner:
     def python_executable(self) -> str:
         return resolve_python(self.settings.python)
 
+    def plot_python_executable(self) -> str:
+        return self.plotter.python_executable()
+
     def environment_status(self, sim_dir: str | None = None) -> dict[str, object]:
-        python = self.python_executable()
-        westlake_ok, westlake_err = probe_westlake(python)
+        sim_python = self.python_executable()
+        plot_python = self.plot_python_executable()
+        westlake_ok, westlake_err = probe_westlake(sim_python)
+        numpy_ok, numpy_info = probe_numpy_for_westlake(sim_python)
+        plot_ok, plot_err = probe_plot_deps(plot_python)
+        simulation_ready = westlake_ok and numpy_ok
         directory = self.simulation_dir(sim_dir)
         pickle_path = directory / "res.pickle"
         return {
-            "python": python,
+            "sim_python": sim_python,
+            "plot_python": plot_python,
+            "python": sim_python,
             "westlake_ok": westlake_ok,
             "westlake_error": westlake_err,
+            "numpy_ok": numpy_ok,
+            "numpy_info": numpy_info,
+            "plot_deps_ok": plot_ok,
+            "plot_deps_error": plot_err,
+            "simulation_ready": simulation_ready,
             "script_ok": self.script_path().exists(),
             "sim_dir": str(directory),
             "sim_dir_ok": directory.exists(),
@@ -42,6 +61,9 @@ class NautilusRunner:
         script = Path(self.settings.script)
         if script.is_absolute():
             return script
+        bundled = ROOT / script
+        if bundled.exists():
+            return bundled.resolve()
         return (self.tutorial_root() / script).resolve()
 
     def simulation_dir(self, sim_dir: str | None) -> Path:

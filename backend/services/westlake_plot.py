@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
 from backend.config import NautilusSettings, ROOT
-
 from backend.services.nautilus_env import resolve_python
 from backend.services.plot_images import attach_image_base64
 
@@ -17,6 +17,12 @@ PlotMode = Literal["combined", "separate", "both"]
 class WestlakePlotter:
     def __init__(self, settings: NautilusSettings) -> None:
         self.settings = settings
+
+    def python_executable(self) -> str:
+        plot_py = (self.settings.plot_python or "").strip()
+        if plot_py:
+            return resolve_python(plot_py)
+        return sys.executable
 
     def outputs_root(self) -> Path:
         path = Path(self.settings.outputs_dir)
@@ -49,7 +55,7 @@ class WestlakePlotter:
         species_csv = ",".join(species) if species else self.settings.default_species
         plot_mode = mode or self.settings.default_plot_mode
         cmd = [
-            resolve_python(self.settings.python),
+            self.python_executable(),
             str(self.plot_script_path()),
             f"--dir={sim_dir}",
             f"--species={species_csv}",

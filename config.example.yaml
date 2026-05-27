@@ -20,7 +20,10 @@ nautilus:
   default_species: "CO,CH3OH,CH3OCH3"
   default_plot_mode: "both"   # combined | separate | both
   outputs_dir: "outputs"
-  python: "python"
+  # 模拟用 Python 3.11/3.12（需 westlake + numpy<2），示例：
+  python: "C:/Users/ROG/AppData/Local/Programs/Python/Python312/python.exe"
+  # 绘图用解释器；留空则与 streamlit run 相同
+  plot_python: ""
 
 server:
   host: "127.0.0.1"

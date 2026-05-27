@@ -350,29 +350,36 @@ def page_simulation_unavailable() -> None:
 def _show_simulation_preflight(nautilus, sim_dir: str | None) -> dict[str, object]:
     status = nautilus.environment_status(sim_dir)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("westlake", "✅" if status["westlake_ok"] else "❌")
+    c1.metric("模拟环境", "✅" if status["simulation_ready"] else "❌")
     c2.metric("res.pickle", "✅" if status["pickle_ok"] else "❌")
-    c3.metric("脚本", "✅" if status["script_ok"] else "❌")
+    c3.metric("绘图依赖", "✅" if status["plot_deps_ok"] else "❌")
     c4.metric("模拟目录", "✅" if status["sim_dir_ok"] else "❌")
 
     with st.expander("环境详情"):
         st.code(
-            f"Python: {status['python']}\n"
+            f"模拟 Python: {status['sim_python']}\n"
+            f"绘图 Python: {status['plot_python']}\n"
             f"模拟目录: {status['sim_dir']}\n"
             f"结果文件: {status['pickle_path']}",
             language=None,
         )
         if not status["westlake_ok"]:
-            st.error(f"当前 Python 无法 import westlake：{status['westlake_error']}")
-            st.caption("请在 westlake-tutorial 目录执行：`pip install -e westlake`")
+            st.error(f"模拟用 Python 无法 import westlake：{status['westlake_error']}")
+            st.caption("运行：`powershell .\\scripts\\setup_westlake_local.ps1`")
+        elif not status["numpy_ok"]:
+            st.error(f"numpy 版本不兼容：{status['numpy_info']}")
+            st.code(
+                f'"{status["sim_python"]}" -m pip install "numpy<2"',
+                language="powershell",
+            )
+        if not status["plot_deps_ok"]:
+            st.error(f"绘图 Python 缺少依赖：{status['plot_deps_error']}")
+            st.caption("在启动 Streamlit 的环境中：`pip install matplotlib westlake`")
 
-    if sys.version_info >= (3, 14):
-        st.warning(
-            "检测到 Python 3.14+：运行 Nautilus **模拟** 可能因 pandas 兼容性失败。"
-            "若已有 `res.pickle`，请用 **「仅绘图」**；或改用 Python 3.11/3.12 并在 `config.yaml` 设置 `nautilus.python`。"
-        )
-    elif status["pickle_ok"]:
-        st.info("目录中已有 `res.pickle`，可直接点 **「仅绘图」** 生成演化图，无需重新跑模拟。")
+    if status["pickle_ok"] and status["plot_deps_ok"]:
+        st.info("可先点 **「仅绘图」** 快速出图；**「运行模拟」** 会重新计算（约 1～15 分钟）。")
+    elif not status["simulation_ready"]:
+        st.warning("模拟环境未就绪时，只能使用已有 `res.pickle` 做 **「仅绘图」**。")
 
     return status
 
@@ -465,21 +472,23 @@ def page_simulation_local(nautilus, settings) -> None:
                 st.error(str(exc))
                 return
 
-        if data["returncode"] != 0:
-            st.error(f"模拟失败（returncode={data['returncode']}）")
-            with st.expander("错误日志", expanded=True):
-                st.text(data.get("stdout") or "")
-                if data.get("stderr"):
-                    st.code(data["stderr"])
-        else:
-            st.success("模拟完成")
-            with st.expander("运行日志"):
-                st.text(data.get("stdout") or "")
-                if data.get("stderr"):
-                    st.code(data["stderr"])
+        plot_data = data.get("plot") if plot_after else None
+        sim_ok = data["returncode"] == 0
 
-        if plot_after and data.get("plot"):
-            show_plot_results(data["plot"], settings)
+        if sim_ok:
+            st.success("模拟完成")
+        else:
+            st.error(f"模拟失败（returncode={data['returncode']}）")
+            if plot_data and not plot_data.get("skipped"):
+                st.warning("已尝试用现有 res.pickle 继续绘图（见下方）。")
+
+        with st.expander("运行日志", expanded=not sim_ok):
+            st.text(data.get("stdout") or "")
+            if data.get("stderr"):
+                st.code(data["stderr"])
+
+        if plot_after and plot_data:
+            show_plot_results(plot_data, settings)
         elif plot_after:
             st.warning("未生成绘图结果。若已有 res.pickle，请使用 **「仅绘图」**。")
 

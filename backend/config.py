@@ -35,7 +35,10 @@ class NautilusSettings(BaseSettings):
     default_species: str = "CO,CH3OH,CH3OCH3"
     default_plot_mode: str = "combined"  # combined | separate | both
     outputs_dir: Path = ROOT / "outputs"
+    # 跑 Nautilus 模拟的解释器（建议 3.11/3.12 + westlake + numpy<2）
     python: str = "python"
+    # 绘图解释器；留空则与启动 Streamlit 的 Python 相同
+    plot_python: str = ""
 
 
 class ServerSettings(BaseSettings):
