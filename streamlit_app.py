@@ -20,6 +20,81 @@ st.set_page_config(
 )
 
 
+def apply_starry_theme() -> None:
+    st.markdown(
+        """
+<style>
+:root {
+  --bg-start: #060914;
+  --bg-end: #0b1230;
+  --card: rgba(16, 24, 54, 0.72);
+  --card-border: rgba(132, 161, 255, 0.28);
+  --text: #e8eeff;
+  --muted: #aebbe6;
+  --accent: #6ea6ff;
+  --accent-2: #8a7bff;
+}
+
+.stApp {
+  color: var(--text);
+  background:
+    radial-gradient(2px 2px at 18% 22%, rgba(255,255,255,0.9), transparent 55%),
+    radial-gradient(1.5px 1.5px at 70% 18%, rgba(180,210,255,0.8), transparent 55%),
+    radial-gradient(2px 2px at 82% 72%, rgba(255,255,255,0.8), transparent 55%),
+    radial-gradient(1.5px 1.5px at 38% 78%, rgba(174,201,255,0.7), transparent 55%),
+    linear-gradient(180deg, var(--bg-start) 0%, var(--bg-end) 100%);
+  background-attachment: fixed;
+}
+
+h1, h2, h3, h4, h5, h6, p, label, span, li, div {
+  color: var(--text);
+}
+
+[data-testid="stSidebar"] {
+  background: rgba(8, 14, 35, 0.85);
+  border-right: 1px solid rgba(132, 161, 255, 0.2);
+}
+
+[data-testid="stForm"], .stDataFrame, .stAlert, [data-testid="stExpander"], [data-testid="stMetric"] {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+}
+
+[data-baseweb="input"] > div,
+[data-baseweb="select"] > div,
+textarea {
+  background: rgba(8, 14, 35, 0.88) !important;
+  color: var(--text) !important;
+  border: 1px solid rgba(120, 145, 232, 0.35) !important;
+}
+
+.stTextInput input, .stTextArea textarea {
+  color: var(--text) !important;
+}
+
+.stButton > button {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #f8fbff;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  box-shadow: 0 8px 18px rgba(85, 118, 214, 0.32);
+}
+
+.stButton > button:hover {
+  filter: brightness(1.08);
+}
+
+.stCaption, .stMarkdown small {
+  color: var(--muted) !important;
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def is_streamlit_cloud() -> bool:
     return os.getenv("STREAMLIT_RUNTIME_ENVIRONMENT") == "cloud"
 
@@ -396,6 +471,7 @@ def main() -> None:
     settings, db, agent, nautilus, on_cloud = load_resources()
     api_base, api_key = simulation_api_config()
     admin_run_enabled = simulation_admin_mode_enabled(on_cloud)
+    apply_starry_theme()
 
     st.title("Astrochem Agent · ChemiVerse")
     if on_cloud:
