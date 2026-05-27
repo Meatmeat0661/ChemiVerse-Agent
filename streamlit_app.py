@@ -277,7 +277,6 @@ def simulation_admin_mode_enabled(on_cloud: bool) -> bool:
 def _simulation_form(settings, default_species_key: str = "plot_species"):
     default_species = st.session_state.get(default_species_key, settings.nautilus.default_species)
     sim_dir = settings.nautilus.default_sim_dir
-    st.caption(f"Simulation directory is fixed: `{sim_dir}`")
     species_text = st.text_input(
         "Species to plot (comma-separated)",
         value=default_species if isinstance(default_species, str) else ",".join([default_species]),
@@ -296,7 +295,7 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
     st.caption("Runs directly on local westlake installation.")
 
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
-    plot_only = st.button("Plot Only", type="primary", key="local_plot")
+    plot_only = st.button("Plot", type="primary", key="local_plot")
     st.info("Run Simulation is hidden; plotting uses existing result files only.")
 
     if plot_only:
@@ -322,15 +321,13 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
     from backend.services.simulation_api import RemoteSimulationClient
 
     st.header("Westlake Evolution + Plotting (Remote)")
-    st.caption(f"Computation runs on the server; visitors do not need local westlake · `{api_base}`")
 
     client = RemoteSimulationClient(api_base, api_key=api_key)
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
-    plot_only = st.button("Plot Only", type="primary", key="remote_plot")
-    st.info("Run Simulation is hidden; visitors can only plot from existing results.")
+    plot_only = st.button("Plot", type="primary", key="remote_plot")
 
     if plot_only:
-        with st.spinner("Remote plotting..."):
+        with st.spinner("Plotting..."):
             try:
                 plot_data = client.plot_only(
                     sim_dir=sim_dir or None,
@@ -439,7 +436,6 @@ def show_plot_results(plot_data: dict, settings, api_base: str | None = None) ->
     if not images and plot_data.get("image_path"):
         images = [{"label": "plot", "path": plot_data["image_path"]}]
 
-    st.success(f"{len(images)} image(s) · run_id={plot_data.get('run_id')}")
     cols = st.columns(min(3, len(images)) or 1)
     for idx, img in enumerate(images):
         with cols[idx % len(cols)]:
