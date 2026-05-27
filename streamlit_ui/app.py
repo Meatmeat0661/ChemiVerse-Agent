@@ -34,7 +34,10 @@ st.set_page_config(
 
 
 def is_streamlit_cloud() -> bool:
-    return os.getenv("STREAMLIT_RUNTIME_ENVIRONMENT") == "cloud"
+    if os.getenv("STREAMLIT_RUNTIME_ENVIRONMENT") == "cloud":
+        return True
+    # Streamlit Cloud 工作目录通常为 /mount/src/...
+    return Path.cwd().as_posix().startswith("/mount/src")
 
 
 def _apply_secrets_to_settings(settings):
@@ -590,8 +593,14 @@ def main() -> None:
             page_reaction_query(db)
 
     with tab2:
-        if api_base:
+        catalog = load_simulation_catalog()
+        use_precomputed = is_streamlit_cloud() or (
+            catalog and (nautilus is None or not nautilus.script_path().exists())
+        )
+        if api_base and not use_precomputed:
             page_simulation_remote(api_base, api_key, settings)
+        elif use_precomputed:
+            page_simulation_unavailable()
         elif nautilus is not None:
             page_simulation_local(nautilus, settings)
         else:

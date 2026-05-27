@@ -7,9 +7,10 @@ data:
 westlake:
   base_url: ""
 
+# Cloud 不跑 westlake 模拟，演化图见 data/plots + simulation_catalog.json
 nautilus:
   tutorial_root: "."
-  script: "westlake/examples/run_nautilus_network.py"
+  script: "backend/scripts/plot_westlake.py"
   default_sim_dir: "example_simulation"
   outputs_dir: outputs
   python: python3
