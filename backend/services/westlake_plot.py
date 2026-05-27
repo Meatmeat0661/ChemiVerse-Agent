@@ -8,6 +8,7 @@ from typing import Literal
 
 from backend.config import NautilusSettings, ROOT
 
+from backend.services.nautilus_env import resolve_python
 from backend.services.plot_images import attach_image_base64
 
 PlotMode = Literal["combined", "separate", "both"]
@@ -48,7 +49,7 @@ class WestlakePlotter:
         species_csv = ",".join(species) if species else self.settings.default_species
         plot_mode = mode or self.settings.default_plot_mode
         cmd = [
-            self.settings.python,
+            resolve_python(self.settings.python),
             str(self.plot_script_path()),
             f"--dir={sim_dir}",
             f"--species={species_csv}",

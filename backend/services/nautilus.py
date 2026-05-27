@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from backend.config import NautilusSettings, ROOT
+from backend.services.nautilus_env import probe_westlake, resolve_python
 from backend.services.westlake_plot import WestlakePlotter
 
 
@@ -11,6 +12,25 @@ class NautilusRunner:
     def __init__(self, settings: NautilusSettings) -> None:
         self.settings = settings
         self.plotter = WestlakePlotter(settings)
+
+    def python_executable(self) -> str:
+        return resolve_python(self.settings.python)
+
+    def environment_status(self, sim_dir: str | None = None) -> dict[str, object]:
+        python = self.python_executable()
+        westlake_ok, westlake_err = probe_westlake(python)
+        directory = self.simulation_dir(sim_dir)
+        pickle_path = directory / "res.pickle"
+        return {
+            "python": python,
+            "westlake_ok": westlake_ok,
+            "westlake_error": westlake_err,
+            "script_ok": self.script_path().exists(),
+            "sim_dir": str(directory),
+            "sim_dir_ok": directory.exists(),
+            "pickle_ok": pickle_path.exists(),
+            "pickle_path": str(pickle_path),
+        }
 
     def tutorial_root(self) -> Path:
         root = self.settings.tutorial_root
@@ -39,7 +59,7 @@ class NautilusRunner:
     ) -> list[str]:
         directory = self.simulation_dir(sim_dir)
         cmd = [
-            self.settings.python,
+            self.python_executable(),
             str(self.script_path()),
             f"--dir={directory}",
         ]
@@ -105,14 +125,17 @@ class NautilusRunner:
         )
         sim_result["run_id"] = run_id
 
-        if sim_result["returncode"] != 0:
+        pickle_path = Path(str(sim_result["pickle_path"]))
+        sim_failed = sim_result["returncode"] != 0
+
+        if sim_failed and not pickle_path.exists():
             sim_result["plot"] = {
                 "skipped": True,
                 "reason": "simulation failed",
+                "stderr": sim_result.get("stderr"),
             }
             return sim_result
 
-        pickle_path = Path(str(sim_result["pickle_path"]))
         if not pickle_path.exists():
             sim_result["plot"] = {
                 "skipped": True,
@@ -127,5 +150,10 @@ class NautilusRunner:
             mode=plot_mode,  # type: ignore[arg-type]
             include_images_base64=include_images_base64,
         )
+        if sim_failed:
+            plot_result["used_existing_pickle"] = True
+            plot_result["simulation_warning"] = (
+                "模拟未成功完成，已使用目录中已有的 res.pickle 绘图。"
+            )
         sim_result["plot"] = plot_result
         return sim_result

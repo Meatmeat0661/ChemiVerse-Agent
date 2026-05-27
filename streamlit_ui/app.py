@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -289,11 +290,104 @@ def _simulation_form(settings, default_species_key: str = "plot_species"):
     return sim_dir, species_list, plot_mode, use_evolution, plot_after
 
 
+def load_simulation_catalog() -> list[dict]:
+    path = ROOT / "data" / "simulation_catalog.json"
+    if not path.exists():
+        return []
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def page_simulation_static() -> None:
+    st.header("Westlake 演化图（预计算）")
+    st.caption("展示已上传到仓库的演化图，无需在本机或 Cloud 安装 westlake。")
+    catalog = load_simulation_catalog()
+    if not catalog:
+        st.warning("暂无预计算图。维护者可在本机运行 `python scripts/publish_plots_to_repo.py --help`")
+        return
+
+    labels = [f"{e.get('title', e['id'])} ({', '.join(e.get('species', []))})" for e in catalog]
+    choice = st.selectbox("选择场景", range(len(catalog)), format_func=lambda i: labels[i])
+    entry = catalog[choice]
+    st.markdown(f"**{entry.get('title', entry['id'])}**")
+    st.caption(entry.get("description", ""))
+
+    images = entry.get("images") or []
+    if not images:
+        st.warning("该场景无图片")
+        return
+
+    st.success(f"共 {len(images)} 张图")
+    cols = st.columns(min(3, len(images)) or 1)
+    for idx, img in enumerate(images):
+        path = ROOT / img["file"]
+        with cols[idx % len(cols)]:
+            st.caption(img.get("label", path.name))
+            if path.exists():
+                st.image(str(path), use_container_width=True)
+            else:
+                st.warning(f"缺失: {img['file']}")
+
+
+def page_simulation_unavailable() -> None:
+    catalog = load_simulation_catalog()
+    if catalog:
+        page_simulation_static()
+        return
+
+    st.header("Westlake 演化图")
+    st.warning("Streamlit Cloud 无法直接运行 westlake 模拟。")
+    st.markdown(
+        """
+**可选方案：**
+
+1. **预计算图**：在本机生成 PNG 后推送到 GitHub（见 `NO_SERVER_PLOTS.md`）  
+2. **远程模拟 API**：配置 Secrets 中的 `simulation_api.base_url`（见 `DEPLOY_SIMULATION_SERVER.md`）  
+3. **本机运行**：`streamlit run streamlit_ui/app.py`，并配置 `config.yaml` 中的 `nautilus.tutorial_root`
+        """
+    )
+
+
+def _show_simulation_preflight(nautilus, sim_dir: str | None) -> dict[str, object]:
+    status = nautilus.environment_status(sim_dir)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("westlake", "✅" if status["westlake_ok"] else "❌")
+    c2.metric("res.pickle", "✅" if status["pickle_ok"] else "❌")
+    c3.metric("脚本", "✅" if status["script_ok"] else "❌")
+    c4.metric("模拟目录", "✅" if status["sim_dir_ok"] else "❌")
+
+    with st.expander("环境详情"):
+        st.code(
+            f"Python: {status['python']}\n"
+            f"模拟目录: {status['sim_dir']}\n"
+            f"结果文件: {status['pickle_path']}",
+            language=None,
+        )
+        if not status["westlake_ok"]:
+            st.error(f"当前 Python 无法 import westlake：{status['westlake_error']}")
+            st.caption("请在 westlake-tutorial 目录执行：`pip install -e westlake`")
+
+    if sys.version_info >= (3, 14):
+        st.warning(
+            "检测到 Python 3.14+：运行 Nautilus **模拟** 可能因 pandas 兼容性失败。"
+            "若已有 `res.pickle`，请用 **「仅绘图」**；或改用 Python 3.11/3.12 并在 `config.yaml` 设置 `nautilus.python`。"
+        )
+    elif status["pickle_ok"]:
+        st.info("目录中已有 `res.pickle`，可直接点 **「仅绘图」** 生成演化图，无需重新跑模拟。")
+
+    return status
+
+
 def show_plot_results(plot_data: dict, settings, api_base: str | None = None) -> None:
     import base64
 
+    if plot_data.get("simulation_warning"):
+        st.warning(plot_data["simulation_warning"])
+
     if plot_data.get("skipped"):
         st.warning(f"绘图跳过: {plot_data.get('reason')}")
+        if plot_data.get("stderr"):
+            st.code(plot_data["stderr"])
+        st.caption("若 `example_simulation/res.pickle` 已存在，请尝试 **「仅绘图」**。")
         return
     if plot_data.get("returncode", 1) != 0:
         st.error("绘图失败")
@@ -341,6 +435,7 @@ def page_simulation_local(nautilus, settings) -> None:
     st.caption("在本机安装 westlake 后直接计算")
 
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
+    _show_simulation_preflight(nautilus, sim_dir or None)
 
     col_a, col_b = st.columns(2)
     with col_a:
@@ -370,14 +465,23 @@ def page_simulation_local(nautilus, settings) -> None:
                 st.error(str(exc))
                 return
 
-        st.write(f"returncode: **{data['returncode']}**")
-        with st.expander("运行日志"):
-            st.text(data.get("stdout") or "")
-            if data.get("stderr"):
-                st.code(data["stderr"])
+        if data["returncode"] != 0:
+            st.error(f"模拟失败（returncode={data['returncode']}）")
+            with st.expander("错误日志", expanded=True):
+                st.text(data.get("stdout") or "")
+                if data.get("stderr"):
+                    st.code(data["stderr"])
+        else:
+            st.success("模拟完成")
+            with st.expander("运行日志"):
+                st.text(data.get("stdout") or "")
+                if data.get("stderr"):
+                    st.code(data["stderr"])
 
         if plot_after and data.get("plot"):
             show_plot_results(data["plot"], settings)
+        elif plot_after:
+            st.warning("未生成绘图结果。若已有 res.pickle，请使用 **「仅绘图」**。")
 
     if plot_only:
         with st.spinner("绘图…"):
@@ -482,7 +586,7 @@ def main() -> None:
         elif nautilus is not None:
             page_simulation_local(nautilus, settings)
         else:
-            st.warning("当前无法实时计算演化图：未配置远程 API，也无法在本机运行。")
+            page_simulation_unavailable()
 
 
 if __name__ == "__main__":
