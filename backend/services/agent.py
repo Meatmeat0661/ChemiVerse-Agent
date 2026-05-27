@@ -28,7 +28,7 @@ def _summarize_reaction(reaction: ReactionRecord) -> str:
     right = " + ".join(
         f"{s.num}×{s.name}{'†' if s.is_special else ''}" for s in reaction.products
     )
-    rate_lines = [_format_rate_param(p) for p in reaction.params[:2]]
+    rate_lines = [_format_rate_param(p) for p in reaction.params]
     rate_text = " | ".join(rate_lines) if rate_lines else "无速率参数"
     rtype = reaction.reaction_type or "未知类型"
     return f"{reaction.key}: {left} → {right} [{rtype}] ({rate_text})"
@@ -66,20 +66,16 @@ def rule_based_summary(
     lines.append("")
     lines.append(f"## 作为反应物（{len(as_reactant)} 条）")
     if as_reactant:
-        for reaction in as_reactant[:15]:
+        for reaction in as_reactant:
             lines.append(f"- {_summarize_reaction(reaction)}")
-        if len(as_reactant) > 15:
-            lines.append(f"- … 另有 {len(as_reactant) - 15} 条未列出")
     else:
         lines.append("- 无匹配反应")
 
     lines.append("")
     lines.append(f"## 作为产物（{len(as_product)} 条）")
     if as_product:
-        for reaction in as_product[:15]:
+        for reaction in as_product:
             lines.append(f"- {_summarize_reaction(reaction)}")
-        if len(as_product) > 15:
-            lines.append(f"- … 另有 {len(as_product) - 15} 条未列出")
     else:
         lines.append("- 无匹配反应")
 

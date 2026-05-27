@@ -22,6 +22,7 @@ if str(ROOT) not in sys.path:
 from backend.config import get_settings
 from backend.db.loader import AstroChemDatabase
 from backend.services.agent import AstroChemAgent
+from backend.services.reaction_display import param_records_for_dataframe, reaction_table_rows
 
 
 st.set_page_config(
@@ -109,12 +110,9 @@ def sidebar_status(settings, db, nautilus) -> None:
         st.rerun()
 
 
-def _reaction_table(rows, limit=50):
-    # rows 已经是 streamlit 友好的字典结构，这里只做截断与显示
-    view = rows[:limit]
-    st.dataframe(view, use_container_width=True)
-    if len(rows) > limit:
-        st.caption(f"另有 {len(rows) - limit} 条未显示")
+def _reaction_table(rows):
+    st.caption(f"共 {len(rows)} 行（含多套速率来源）")
+    st.dataframe(rows, use_container_width=True)
 
 
 def _species_list_from_text(text: str) -> list[str]:
@@ -207,27 +205,19 @@ def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) 
         [f"作为反应物 ({len(result.reactions_as_reactant)})", f"作为产物 ({len(result.reactions_as_product)})"]
     )
 
-    def reaction_to_row(rxn):
-        left = " + ".join(f"{s.num}×{s.name}{'†' if s.is_special else ''}" for s in rxn.reactants)
-        right = " + ".join(f"{s.num}×{s.name}{'†' if s.is_special else ''}" for s in rxn.products)
-        p0 = rxn.params[0] if rxn.params else None
-        rate = ""
-        if p0 and p0.alpha is not None:
-            rate = f"α={p0.alpha} β={p0.beta} γ={p0.gamma}"
-        return {
-            "key": rxn.key,
-            "反应": f"{left} → {right}",
-            "类型": rxn.reaction_type or "未知类型",
-            "速率": rate,
-        }
+    def rows_for_reactions(reactions):
+        rows: list[dict] = []
+        for rxn in reactions:
+            rows.extend(reaction_table_rows(rxn))
+        return rows
+
+    st.caption("同一反应若有多套文献/数据库速率，会分多行列出（来源、α/β/γ、温度范围）。")
 
     with t1:
-        rows = [reaction_to_row(rxn) for rxn in result.reactions_as_reactant]
-        _reaction_table(rows)
+        _reaction_table(rows_for_reactions(result.reactions_as_reactant))
 
     with t2:
-        rows = [reaction_to_row(rxn) for rxn in result.reactions_as_product]
-        _reaction_table(rows)
+        _reaction_table(rows_for_reactions(result.reactions_as_product))
 
 
 def page_reaction_query(db: AstroChemDatabase) -> None:
@@ -266,32 +256,18 @@ def page_reaction_query(db: AstroChemDatabase) -> None:
         return
 
     st.success(f"找到 {len(matched)} 条匹配反应")
-    for rxn in matched[:50]:
+    for rxn in matched:
         with st.expander(f"{rxn.key}（{rxn.reaction_type or '未知类型'}）", expanded=False):
             left = " + ".join(f"{s.num}×{s.name}{'†' if s.is_special else ''}" for s in rxn.reactants)
             right = " + ".join(f"{s.num}×{s.name}{'†' if s.is_special else ''}" for s in rxn.products)
             st.write(f"**反应**：{left} → {right}")
 
-            if rxn.params:
-                st.subheader("速率参数（节选）")
-                st.dataframe(
-                    [
-                        {
-                            "alpha": p.alpha,
-                            "beta": p.beta,
-                            "gamma": p.gamma,
-                            "T范围": f"{p.temp_min}..{p.temp_max}" if p.temp_min is not None else "",
-                            "origin": ", ".join(p.origin[:3]) if p.origin else "",
-                        }
-                        for p in rxn.params[:10]
-                    ],
-                    use_container_width=True,
-                )
+            param_rows = param_records_for_dataframe(rxn)
+            if param_rows:
+                st.subheader(f"速率参数（共 {len(param_rows)} 套来源）")
+                st.dataframe(param_rows, use_container_width=True)
             else:
                 st.caption("该反应无速率参数记录")
-
-    if len(matched) > 50:
-        st.caption("仅展示前 50 条匹配反应")
 
 
 def simulation_api_config() -> tuple[str | None, str]:

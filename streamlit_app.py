@@ -11,6 +11,7 @@ import streamlit as st
 from backend.config import get_settings
 from backend.db.loader import AstroChemDatabase
 from backend.services.agent import AstroChemAgent
+from backend.services.reaction_display import param_records_for_dataframe, reaction_table_rows
 
 st.set_page_config(
     page_title="天体化学 Agent",
@@ -165,26 +166,12 @@ def page_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) -> None:
                 [f"作为反应物 ({len(result.reactions_as_reactant)})", f"作为产物 ({len(result.reactions_as_product)})"]
             )
 
-            def reaction_table(reactions, limit=50):
+            def reaction_table(reactions):
                 rows = []
-                for rxn in reactions[:limit]:
-                    left = " + ".join(f"{s.name}" for s in rxn.reactants)
-                    right = " + ".join(f"{s.name}" for s in rxn.products)
-                    p0 = rxn.params[0] if rxn.params else None
-                    rate = ""
-                    if p0 and p0.alpha is not None:
-                        rate = f"α={p0.alpha} β={p0.beta} γ={p0.gamma}"
-                    rows.append(
-                        {
-                            "key": rxn.key,
-                            "反应": f"{left} → {right}",
-                            "类型": rxn.reaction_type,
-                            "速率": rate,
-                        }
-                    )
+                for rxn in reactions:
+                    rows.extend(reaction_table_rows(rxn))
+                st.caption(f"共 {len(reactions)} 条反应 · {len(rows)} 行（多套速率来源分多行）")
                 st.dataframe(rows, use_container_width=True)
-                if len(reactions) > limit:
-                    st.caption(f"另有 {len(reactions) - limit} 条未显示")
 
             with t1:
                 reaction_table(result.reactions_as_reactant)
