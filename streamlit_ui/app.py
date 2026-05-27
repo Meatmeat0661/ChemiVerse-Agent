@@ -33,12 +33,13 @@ def apply_starry_theme() -> None:
         """
 <style>
 :root {
-  --bg-start: #030611;
-  --bg-end: #071128;
-  --card: rgba(16, 24, 54, 0.72);
-  --card-border: rgba(132, 161, 255, 0.28);
+  --bg-start: #0f2252;
+  --bg-mid: #183a78;
+  --bg-end: #1f4f96;
+  --card: rgba(24, 44, 96, 0.68);
+  --card-border: rgba(148, 184, 255, 0.35);
   --text: #e8eeff;
-  --muted: #aebbe6;
+  --muted: #b8c8f0;
   --accent: #6ea6ff;
   --accent-2: #8a7bff;
 }
@@ -46,12 +47,21 @@ def apply_starry_theme() -> None:
 .stApp {
   color: var(--text);
   background:
-    radial-gradient(2px 2px at 18% 22%, rgba(255,255,255,0.9), transparent 55%),
-    radial-gradient(1.5px 1.5px at 70% 18%, rgba(180,210,255,0.8), transparent 55%),
-    radial-gradient(2px 2px at 82% 72%, rgba(255,255,255,0.8), transparent 55%),
-    radial-gradient(1.5px 1.5px at 38% 78%, rgba(174,201,255,0.7), transparent 55%),
-    linear-gradient(180deg, var(--bg-start) 0%, var(--bg-end) 100%);
+    radial-gradient(ellipse 70% 45% at 12% 8%, rgba(110, 166, 255, 0.22), transparent 58%),
+    radial-gradient(ellipse 55% 40% at 88% 92%, rgba(138, 123, 255, 0.16), transparent 55%),
+    radial-gradient(ellipse 50% 35% at 50% 100%, rgba(72, 130, 220, 0.14), transparent 50%),
+    radial-gradient(2px 2px at 18% 22%, rgba(255,255,255,0.85), transparent 55%),
+    radial-gradient(1.5px 1.5px at 70% 18%, rgba(200,220,255,0.75), transparent 55%),
+    radial-gradient(2px 2px at 82% 72%, rgba(255,255,255,0.75), transparent 55%),
+    radial-gradient(1.5px 1.5px at 38% 78%, rgba(190,215,255,0.65), transparent 55%),
+    linear-gradient(165deg, var(--bg-start) 0%, var(--bg-mid) 48%, var(--bg-end) 100%);
   background-attachment: fixed;
+}
+
+[data-testid="stAppViewContainer"],
+[data-testid="stHeader"],
+section.main > div {
+  background: transparent;
 }
 
 h1, h2, h3, h4, h5, h6, p, label, span, li, div {
@@ -59,8 +69,8 @@ h1, h2, h3, h4, h5, h6, p, label, span, li, div {
 }
 
 [data-testid="stSidebar"] {
-  background: rgba(8, 14, 35, 0.85);
-  border-right: 1px solid rgba(132, 161, 255, 0.2);
+  background: linear-gradient(180deg, rgba(14, 32, 72, 0.92) 0%, rgba(18, 42, 88, 0.88) 100%);
+  border-right: 1px solid rgba(148, 184, 255, 0.28);
 }
 
 [data-testid="stForm"], .stDataFrame, .stAlert, [data-testid="stExpander"], [data-testid="stMetric"] {
@@ -91,15 +101,37 @@ textarea {
 }
 
 .stButton > button[kind="primary"] {
-  padding: 1rem 3.2rem !important;
-  min-height: 3.4rem;
-  font-size: 1.28rem;
+  padding: 0.95rem 2.3rem !important;
+  min-height: 3.25rem;
+  font-size: 1.36rem;
+  font-weight: 700;
   letter-spacing: 0.05em;
   border-radius: 12px;
 }
 
 .stButton > button:hover {
   filter: brightness(1.08);
+}
+
+.stTabs [data-baseweb="tab-list"] {
+  gap: 0.55rem;
+}
+
+.stTabs [data-baseweb="tab"] {
+  height: 3rem;
+  padding: 0.5rem 1.2rem;
+  font-size: 1.2rem;
+  border: 1.4px solid rgba(156, 200, 255, 0.6);
+  border-radius: 10px 10px 0 0;
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+  background: rgba(45, 74, 148, 0.5);
+}
+
+.stTabs [aria-selected="true"] {
+  border-bottom: 4px solid #9ad8ff !important;
+  box-shadow: inset 0 -1px 0 rgba(154, 216, 255, 0.45);
 }
 
 .stCaption, .stMarkdown small {
@@ -202,9 +234,7 @@ def _species_list_from_text(text: str) -> list[str]:
 
 
 def _plot_action_button(key: str) -> bool:
-    _, col, _ = st.columns([0.5, 4, 0.5])
-    with col:
-        return st.button("Plot", type="primary", use_container_width=True, key=key)
+    return st.button("Plot", type="primary", key=key)
 
 
 def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) -> None:
