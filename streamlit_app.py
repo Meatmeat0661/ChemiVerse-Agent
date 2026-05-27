@@ -25,9 +25,9 @@ def apply_starry_theme() -> None:
         """
 <style>
 :root {
-  --bg-start: #0f2252;
-  --bg-mid: #183a78;
-  --bg-end: #1f4f96;
+  --bg-start: #11284f;
+  --bg-mid: #27456f;
+  --bg-end: #344f79;
   --card: rgba(24, 44, 96, 0.68);
   --card-border: rgba(148, 184, 255, 0.35);
   --text: #e8eeff;
@@ -40,14 +40,20 @@ def apply_starry_theme() -> None:
 .stApp {
   color: var(--text);
   background:
-    radial-gradient(ellipse 70% 45% at 12% 8%, rgba(110, 166, 255, 0.22), transparent 58%),
-    radial-gradient(ellipse 55% 40% at 88% 92%, rgba(138, 123, 255, 0.16), transparent 55%),
-    radial-gradient(ellipse 50% 35% at 50% 100%, rgba(72, 130, 220, 0.14), transparent 50%),
-    radial-gradient(2px 2px at 18% 22%, rgba(255,255,255,0.85), transparent 55%),
-    radial-gradient(1.5px 1.5px at 70% 18%, rgba(200,220,255,0.75), transparent 55%),
-    radial-gradient(2px 2px at 82% 72%, rgba(255,255,255,0.75), transparent 55%),
-    radial-gradient(1.5px 1.5px at 38% 78%, rgba(190,215,255,0.65), transparent 55%),
-    linear-gradient(165deg, var(--bg-start) 0%, var(--bg-mid) 48%, var(--bg-end) 100%);
+    radial-gradient(ellipse 58% 42% at -4% 104%, rgba(222, 239, 255, 0.52), transparent 66%),
+    radial-gradient(ellipse 65% 48% at 12% 88%, rgba(173, 208, 245, 0.26), transparent 72%),
+    radial-gradient(ellipse 92% 70% at 50% -18%, rgba(104, 148, 210, 0.17), transparent 74%),
+    radial-gradient(1.7px 1.7px at 9% 17%, rgba(255,255,255,0.72), transparent 62%),
+    radial-gradient(1.4px 1.4px at 21% 35%, rgba(236,245,255,0.62), transparent 62%),
+    radial-gradient(1.6px 1.6px at 33% 13%, rgba(241,248,255,0.66), transparent 62%),
+    radial-gradient(1.3px 1.3px at 48% 28%, rgba(232,242,255,0.58), transparent 62%),
+    radial-gradient(1.5px 1.5px at 62% 18%, rgba(244,250,255,0.64), transparent 62%),
+    radial-gradient(1.3px 1.3px at 79% 30%, rgba(230,242,255,0.56), transparent 62%),
+    radial-gradient(1.4px 1.4px at 87% 14%, rgba(250,252,255,0.67), transparent 62%),
+    radial-gradient(1.2px 1.2px at 74% 58%, rgba(233,244,255,0.48), transparent 62%),
+    radial-gradient(1.1px 1.1px at 56% 72%, rgba(224,238,255,0.42), transparent 62%),
+    radial-gradient(1.1px 1.1px at 41% 60%, rgba(236,246,255,0.44), transparent 62%),
+    linear-gradient(166deg, var(--bg-start) 0%, var(--bg-mid) 54%, var(--bg-end) 100%);
   background-attachment: fixed;
 }
 

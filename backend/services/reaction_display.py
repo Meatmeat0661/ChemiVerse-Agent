@@ -15,7 +15,11 @@ def _format_origin(param: ReactionParam) -> str:
 def _format_temp_range(param: ReactionParam) -> str:
     if param.temp_min is None and param.temp_max is None:
         return "—"
-    return f"{param.temp_min} .. {param.temp_max}"
+    if param.temp_min is not None and param.temp_max is not None:
+        return f"{param.temp_min} - {param.temp_max}"
+    if param.temp_min is not None:
+        return str(param.temp_min)
+    return str(param.temp_max)
 
 
 def format_rate_param(param: ReactionParam) -> str:
@@ -42,19 +46,19 @@ def reaction_equation(rxn: ReactionRecord) -> str:
 def reaction_table_rows(rxn: ReactionRecord) -> list[dict[str, object]]:
     """One table row per rate source (params entry)."""
     equation = reaction_equation(rxn)
-    rtype = rxn.reaction_type or "未知类型"
+    rtype = rxn.reaction_type or "unknown"
 
     if not rxn.params:
         return [
             {
                 "key": rxn.key,
-                "反应": equation,
-                "类型": rtype,
-                "来源": "—",
+                "Reaction": equation,
+                "Type": rtype,
+                "Source": "—",
                 "α": "—",
                 "β": "—",
                 "γ": "—",
-                "T范围(K)": "—",
+                "T range (K)": "—",
             }
         ]
 
@@ -63,13 +67,13 @@ def reaction_table_rows(rxn: ReactionRecord) -> list[dict[str, object]]:
         rows.append(
             {
                 "key": rxn.key if idx == 0 else "",
-                "反应": equation if idx == 0 else "",
-                "类型": rtype if idx == 0 else "",
-                "来源": _format_origin(param),
+                "Reaction": equation if idx == 0 else "",
+                "Type": rtype if idx == 0 else "",
+                "Source": _format_origin(param),
                 "α": param.alpha if param.alpha is not None else "—",
                 "β": param.beta if param.beta is not None else "—",
                 "γ": param.gamma if param.gamma is not None else "—",
-                "T范围(K)": _format_temp_range(param),
+                "T range (K)": _format_temp_range(param),
             }
         )
     return rows
@@ -81,11 +85,11 @@ def param_records_for_dataframe(rxn: ReactionRecord) -> list[dict[str, object]]:
         return []
     return [
         {
-            "来源": _format_origin(p),
+            "Source": _format_origin(p),
             "α": p.alpha,
             "β": p.beta,
             "γ": p.gamma,
-            "T范围(K)": _format_temp_range(p),
+            "T range (K)": _format_temp_range(p),
             "formula": p.formula or "",
             "comment": p.comment or "",
         }
