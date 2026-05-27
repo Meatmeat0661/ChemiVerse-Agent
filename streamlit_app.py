@@ -12,7 +12,6 @@ from backend.config import get_settings
 from backend.db.loader import AstroChemDatabase
 from backend.services.agent import AstroChemAgent
 from backend.services.reaction_display import reaction_table_rows
-from streamlit_ui.pagination import paginated_dataframe
 
 st.set_page_config(
     page_title="天体化学 Agent",
@@ -152,21 +151,17 @@ def page_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) -> None:
                 [f"作为反应物 ({len(result.reactions_as_reactant)})", f"作为产物 ({len(result.reactions_as_product)})"]
             )
 
-            def reaction_table(reactions, table_key: str):
+            def reaction_table(reactions):
                 rows = []
                 for rxn in reactions:
                     rows.extend(reaction_table_rows(rxn))
-                paginated_dataframe(
-                    rows,
-                    table_key=table_key,
-                    page_size=50,
-                    caption=f"共 {len(reactions)} 条反应 · {len(rows)} 行（多套速率来源分多行）",
-                )
+                st.caption(f"共 {len(reactions)} 条反应 · {len(rows)} 行（多套速率来源分多行）")
+                st.dataframe(rows, use_container_width=True)
 
             with t1:
-                reaction_table(result.reactions_as_reactant, table_key="legacy_mol_reactant")
+                reaction_table(result.reactions_as_reactant)
             with t2:
-                reaction_table(result.reactions_as_product, table_key="legacy_mol_product")
+                reaction_table(result.reactions_as_product)
 
         st.session_state["plot_species"] = result.resolved_key or query.strip()
 

@@ -23,7 +23,6 @@ from backend.config import get_settings
 from backend.db.loader import AstroChemDatabase
 from backend.services.agent import AstroChemAgent
 from backend.services.reaction_display import reaction_table_rows
-from streamlit_ui.pagination import paginated_dataframe, reset_table_page
 
 
 st.set_page_config(
@@ -111,13 +110,9 @@ def sidebar_status(settings, db, nautilus) -> None:
         st.rerun()
 
 
-def _reaction_table(rows, *, table_key: str) -> None:
-    paginated_dataframe(
-        rows,
-        table_key=table_key,
-        page_size=50,
-        caption="同一反应若有多套文献/数据库速率，会分多行列出（来源、α/β/γ、温度范围）。",
-    )
+def _reaction_table(rows) -> None:
+    st.caption(f"共 {len(rows)} 行（含多套速率来源）")
+    st.dataframe(rows, use_container_width=True)
 
 
 def _species_list_from_text(text: str) -> list[str]:
@@ -150,9 +145,6 @@ def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) 
 
     if not submitted:
         return
-
-    reset_table_page("mol_as_reactant")
-    reset_table_page("mol_as_product")
 
     with st.spinner("检索中…"):
         result = run_async(
@@ -204,11 +196,13 @@ def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) 
             rows.extend(reaction_table_rows(rxn))
         return rows
 
+    st.caption("同一反应若有多套文献/数据库速率，会分多行列出（来源、α/β/γ、温度范围）。")
+
     with t1:
-        _reaction_table(rows_for_reactions(result.reactions_as_reactant), table_key="mol_as_reactant")
+        _reaction_table(rows_for_reactions(result.reactions_as_reactant))
 
     with t2:
-        _reaction_table(rows_for_reactions(result.reactions_as_product), table_key="mol_as_product")
+        _reaction_table(rows_for_reactions(result.reactions_as_product))
 
 
 def page_reaction_query(db: AstroChemDatabase) -> None:
@@ -222,8 +216,6 @@ def page_reaction_query(db: AstroChemDatabase) -> None:
 
     if not submitted:
         return
-
-    reset_table_page("reaction_search")
 
     key = (key or "").strip()
     species = (species or "").strip()
@@ -252,7 +244,8 @@ def page_reaction_query(db: AstroChemDatabase) -> None:
     rows: list[dict] = []
     for rxn in matched:
         rows.extend(reaction_table_rows(rxn))
-    _reaction_table(rows, table_key="reaction_search")
+    st.caption("同一反应若有多套文献/数据库速率，会分多行列出。")
+    _reaction_table(rows)
 
 
 def simulation_api_config() -> tuple[str | None, str]:
