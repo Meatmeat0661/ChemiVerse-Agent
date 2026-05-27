@@ -1,9 +1,4 @@
-"""AstroChem Agent — Streamlit UI (重写版入口).
-
-功能：
-- 分子检索（SMILES / key / 分子式）并展示相关反应
-- Westlake Nautilus 演化模拟与丰度出图（本机或远程）
-"""
+"""AstroChem Agent — Streamlit UI."""
 
 from __future__ import annotations
 
@@ -27,7 +22,7 @@ from backend.services.reaction_display import reaction_table_rows
 
 
 st.set_page_config(
-    page_title="天体化学 Agent",
+    page_title="Astrochem Agent",
     page_icon="🌌",
     layout="wide",
 )
@@ -82,25 +77,25 @@ def run_async(coro):
 
 
 def sidebar_status(settings, db, nautilus) -> None:
-    st.sidebar.header("系统状态")
+    st.sidebar.header("System Status")
 
     mol_ok = settings.data.molecules_path.exists()
     rxn_ok = settings.data.reactions_path.exists()
-    st.sidebar.write("分子库", "✅" if mol_ok else "❌")
-    st.sidebar.write("反应库", "✅" if rxn_ok else "❌")
+    st.sidebar.write("Molecule DB", "✅" if mol_ok else "❌")
+    st.sidebar.write("Reaction DB", "✅" if rxn_ok else "❌")
 
     if nautilus is not None:
-        st.sidebar.write("Westlake 脚本", "✅" if nautilus.script_path().exists() else "❌")
+        st.sidebar.write("Westlake Script", "✅" if nautilus.script_path().exists() else "❌")
     else:
-        st.sidebar.write("Westlake", "—（云端查询模式）")
+        st.sidebar.write("Westlake", "— (Cloud query mode)")
 
     if mol_ok and rxn_ok:
         try:
-            st.sidebar.caption(f"已加载 {len(db.molecules)} 种分子 · {len(db.reactions)} 条反应")
+            st.sidebar.caption(f"Loaded {len(db.molecules)} molecules · {len(db.reactions)} reactions")
         except Exception as exc:
-            st.sidebar.warning(f"加载失败: {exc}")
+            st.sidebar.warning(f"Load failed: {exc}")
 
-    with st.sidebar.expander("路径配置"):
+    with st.sidebar.expander("Path Configuration"):
         lines = [
             f"molecules:\n{settings.data.molecules_path}",
             f"reactions:\n{settings.data.reactions_path}",
@@ -109,13 +104,13 @@ def sidebar_status(settings, db, nautilus) -> None:
             lines.append(f"tutorial:\n{nautilus.tutorial_root()}")
         st.code("\n\n".join(lines), language=None)
 
-    if st.sidebar.button("重新加载数据库"):
+    if st.sidebar.button("Reload Database"):
         load_resources.clear()
         st.rerun()
 
 
 def _reaction_table(rows) -> None:
-    st.caption(f"共 {len(rows)} 行（含多套速率来源）")
+    st.caption(f"{len(rows)} rows (including multiple rate sources)")
     st.dataframe(rows, use_container_width=True)
 
 
@@ -124,8 +119,8 @@ def _species_list_from_text(text: str) -> list[str]:
 
 
 def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) -> None:
-    st.header("分子查询")
-    st.caption("支持 SMILES / 物种 key / 分子式，并展示相关反应")
+    st.header("Molecule Query")
+    st.caption("Supports SMILES / species key / formula, with linked reactions.")
 
     examples = ["N2", "CCH", "[C]#C", "CO", "HCN", "NH3", "CH3OH", "H2O"]
     ex_cols = st.columns(len(examples))
@@ -137,20 +132,20 @@ def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) 
         col1, col2 = st.columns([3, 1])
         with col1:
             query = st.text_input(
-                "查询",
-                placeholder="例如 N2、 [C]#C 、 CH3OH",
+                "Query",
+                placeholder="e.g., N2, [C]#C, CH3OH",
                 key="molecule_query_input",
             )
         with col2:
-            use_llm = st.checkbox("Westlake LLM", value=False, help="需在 config.yaml 配置 base_url")
+            use_llm = st.checkbox("Westlake LLM", value=False, help="Requires westlake.base_url in config.yaml")
 
-        include_reactions = st.checkbox("包含相关反应", value=True)
-        submitted = st.form_submit_button("查询", type="primary", disabled=not query.strip())
+        include_reactions = st.checkbox("Include related reactions", value=True)
+        submitted = st.form_submit_button("Search", type="primary", disabled=not query.strip())
 
     if not submitted:
         return
 
-    with st.spinner("检索中…"):
+    with st.spinner("Searching..."):
         result = run_async(
             agent.answer(
                 query.strip(),
@@ -164,24 +159,24 @@ def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) 
         st.error(result.summary)
         return
 
-    st.success(f"解析为 **{result.resolved_key}**")
+    st.success(f"Resolved to **{result.resolved_key}**")
 
     m = result.molecule
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("分子量 ma", f"{m.ma}" if m.ma else "—")
-    c2.metric("电荷", m.charge if m.charge is not None else "—")
-    c3.metric("环数", m.num_rings if m.num_rings is not None else "—")
-    c4.metric("原子数", m.num_atoms if m.num_atoms else "—")
+    c1.metric("Molecular Mass (ma)", f"{m.ma}" if m.ma else "—")
+    c2.metric("Charge", m.charge if m.charge is not None else "—")
+    c3.metric("Ring Count", m.num_rings if m.num_rings is not None else "—")
+    c4.metric("Atom Count", m.num_atoms if m.num_atoms else "—")
 
     obs = m.observations or []
     if obs:
-        st.subheader(f"观测记录（{len(obs)}）")
+        st.subheader(f"Observations ({len(obs)})")
         st.dataframe(
             [{"source": o.source, "refs": len(o.origin or [])} for o in obs[:200]],
             use_container_width=True,
         )
         if len(obs) > 200:
-            st.caption("仅显示前 200 条观测")
+            st.caption("Showing first 200 observations only")
 
     # 把分子 key 作为后续出图默认物种
     st.session_state["plot_species"] = result.resolved_key or query.strip()
@@ -189,9 +184,9 @@ def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) 
     if not include_reactions:
         return
 
-    st.subheader("相关反应")
+    st.subheader("Related Reactions")
     t1, t2 = st.tabs(
-        [f"作为反应物 ({len(result.reactions_as_reactant)})", f"作为产物 ({len(result.reactions_as_product)})"]
+        [f"As Reactant ({len(result.reactions_as_reactant)})", f"As Product ({len(result.reactions_as_product)})"]
     )
 
     def rows_for_reactions(reactions):
@@ -200,7 +195,7 @@ def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) 
             rows.extend(reaction_table_rows(rxn))
         return rows
 
-    st.caption("同一反应若有多套文献/数据库速率，会分多行列出（来源、α/β/γ、温度范围）。")
+    st.caption("If a reaction has multiple literature/database rate sets, each appears in a separate row (source, α/β/γ, temperature range).")
 
     with t1:
         _reaction_table(rows_for_reactions(result.reactions_as_reactant))
@@ -210,13 +205,13 @@ def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) 
 
 
 def page_reaction_query(db: AstroChemDatabase) -> None:
-    st.header("反应查询")
-    st.caption("按 reaction key 精确检索，或通过反应物/产物物种匹配展示列表")
+    st.header("Reaction Query")
+    st.caption("Search exactly by reaction key, or match by reactant/product species.")
 
     with st.form("reaction_query_form", clear_on_submit=False):
-        key = st.text_input("reaction key（如 `CR;N2>N;N`）", placeholder="可留空")
-        species = st.text_input("匹配物种（反应物/产物均可，填分子 key 或别名）", placeholder="可留空")
-        submitted = st.form_submit_button("检索", type="primary")
+        key = st.text_input("Reaction key (e.g., `CR;N2>N;N`)", placeholder="Optional")
+        species = st.text_input("Match species (reactant/product; key or alias)", placeholder="Optional")
+        submitted = st.form_submit_button("Search", type="primary")
 
     if not submitted:
         return
@@ -237,18 +232,18 @@ def page_reaction_query(db: AstroChemDatabase) -> None:
             if low in reactant_names or low in product_names:
                 matched.append(r)
     else:
-        st.warning("请至少填写 reaction key 或物种名")
+        st.warning("Please provide either a reaction key or a species name.")
         return
 
     if not matched:
-        st.info("未找到匹配反应")
+        st.info("No matching reactions found.")
         return
 
-    st.success(f"找到 {len(matched)} 条匹配反应")
+    st.success(f"Found {len(matched)} matching reactions")
     rows: list[dict] = []
     for rxn in matched:
         rows.extend(reaction_table_rows(rxn))
-    st.caption("同一反应若有多套文献/数据库速率，会分多行列出。")
+    st.caption("Multiple rate sources for the same reaction are shown as separate rows.")
     _reaction_table(rows)
 
 
@@ -280,27 +275,28 @@ def simulation_admin_mode_enabled(on_cloud: bool) -> bool:
     if not admin_key:
         return False
 
-    st.sidebar.markdown("### 管理员模式")
-    token = st.sidebar.text_input("模拟管理员密钥", type="password", key="sim_admin_key")
+    st.sidebar.markdown("### Admin Mode")
+    token = st.sidebar.text_input("Simulation admin key", type="password", key="sim_admin_key")
     enabled = token.strip() == admin_key
     if enabled:
-        st.sidebar.success("实时模拟已开启（管理员）")
+        st.sidebar.success("Real-time simulation enabled (admin)")
     return enabled
 
 
 def _simulation_form(settings, default_species_key: str = "plot_species"):
     default_species = st.session_state.get(default_species_key, settings.nautilus.default_species)
-    sim_dir = st.text_input("模拟目录", value=settings.nautilus.default_sim_dir)
+    sim_dir = settings.nautilus.default_sim_dir
+    st.caption(f"Simulation directory is fixed: `{sim_dir}`")
     species_text = st.text_input(
-        "绘图物种（逗号分隔）",
+        "Species to plot (comma-separated)",
         value=default_species if isinstance(default_species, str) else ",".join([default_species]),
     )
     # 固定仅输出一张合并图，简化访客操作
     plot_mode = "combined"
-    use_evolution = st.checkbox("使用结构演化 (--use_evolution)", value=True)
-    plot_after = st.checkbox("运行后自动绘图", value=True)
+    use_evolution = True
+    plot_after = True
 
-    st.info("示例: `N2,NH3,HCN,H2CO` 或 `CO,CH3OH,CH3OCH3`", icon="💡")
+    st.info("Examples: `N2,NH3,HCN,H2CO` or `CO,CH3OH,CH3OCH3`", icon="💡")
     species_list = _species_list_from_text(species_text)
     return sim_dir, species_list, plot_mode, use_evolution, plot_after
 
@@ -313,25 +309,25 @@ def load_simulation_catalog() -> list[dict]:
 
 
 def page_simulation_static() -> None:
-    st.header("Westlake 演化图（预计算）")
-    st.caption("展示已上传到仓库的演化图，无需在本机或 Cloud 安装 westlake。")
+    st.header("Westlake Evolution Plots (Precomputed)")
+    st.caption("Displays plots committed to the repository; no local or Cloud westlake install required.")
     catalog = load_simulation_catalog()
     if not catalog:
-        st.warning("暂无预计算图。维护者可在本机运行 `python scripts/publish_plots_to_repo.py --help`")
+        st.warning("No precomputed plots found. Maintainers can run `python scripts/publish_plots_to_repo.py --help` locally.")
         return
 
     labels = [f"{e.get('title', e['id'])} ({', '.join(e.get('species', []))})" for e in catalog]
-    choice = st.selectbox("选择场景", range(len(catalog)), format_func=lambda i: labels[i])
+    choice = st.selectbox("Select scenario", range(len(catalog)), format_func=lambda i: labels[i])
     entry = catalog[choice]
     st.markdown(f"**{entry.get('title', entry['id'])}**")
     st.caption(entry.get("description", ""))
 
     images = entry.get("images") or []
     if not images:
-        st.warning("该场景无图片")
+        st.warning("No images available for this scenario.")
         return
 
-    st.success(f"共 {len(images)} 张图")
+    st.success(f"{len(images)} image(s)")
     cols = st.columns(min(3, len(images)) or 1)
     for idx, img in enumerate(images):
         path = ROOT / img["file"]
@@ -340,7 +336,7 @@ def page_simulation_static() -> None:
             if path.exists():
                 st.image(str(path), use_container_width=True)
             else:
-                st.warning(f"缺失: {img['file']}")
+                st.warning(f"Missing: {img['file']}")
 
 
 def page_simulation_unavailable() -> None:
@@ -349,15 +345,15 @@ def page_simulation_unavailable() -> None:
         page_simulation_static()
         return
 
-    st.header("Westlake 演化图")
-    st.warning("Streamlit Cloud 无法直接运行 westlake 模拟。")
+    st.header("Westlake Evolution")
+    st.warning("Streamlit Cloud cannot run westlake simulations directly.")
     st.markdown(
         """
-**可选方案：**
+**Available options:**
 
-1. **预计算图**：在本机生成 PNG 后推送到 GitHub（见 `NO_SERVER_PLOTS.md`）  
-2. **远程模拟 API**：配置 Secrets 中的 `simulation_api.base_url`（见 `DEPLOY_SIMULATION_SERVER.md`）  
-3. **本机运行**：`streamlit run streamlit_ui/app.py`，并配置 `config.yaml` 中的 `nautilus.tutorial_root`
+1. **Precomputed plots**: generate PNG files locally and push to GitHub (see `NO_SERVER_PLOTS.md`)  
+2. **Remote simulation API**: configure `simulation_api.base_url` in Secrets (see `DEPLOY_SIMULATION_SERVER.md`)  
+3. **Run locally**: `streamlit run streamlit_ui/app.py` with `nautilus.tutorial_root` configured in `config.yaml`
         """
     )
 
@@ -365,36 +361,36 @@ def page_simulation_unavailable() -> None:
 def _show_simulation_preflight(nautilus, sim_dir: str | None) -> dict[str, object]:
     status = nautilus.environment_status(sim_dir)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("模拟环境", "✅" if status["simulation_ready"] else "❌")
+    c1.metric("Simulation Env", "✅" if status["simulation_ready"] else "❌")
     c2.metric("res.pickle", "✅" if status["pickle_ok"] else "❌")
-    c3.metric("绘图依赖", "✅" if status["plot_deps_ok"] else "❌")
-    c4.metric("模拟目录", "✅" if status["sim_dir_ok"] else "❌")
+    c3.metric("Plot Dependencies", "✅" if status["plot_deps_ok"] else "❌")
+    c4.metric("Simulation Directory", "✅" if status["sim_dir_ok"] else "❌")
 
-    with st.expander("环境详情"):
+    with st.expander("Environment Details"):
         st.code(
-            f"模拟 Python: {status['sim_python']}\n"
-            f"绘图 Python: {status['plot_python']}\n"
-            f"模拟目录: {status['sim_dir']}\n"
-            f"结果文件: {status['pickle_path']}",
+            f"Simulation Python: {status['sim_python']}\n"
+            f"Plot Python: {status['plot_python']}\n"
+            f"Simulation directory: {status['sim_dir']}\n"
+            f"Result file: {status['pickle_path']}",
             language=None,
         )
         if not status["westlake_ok"]:
-            st.error(f"模拟用 Python 无法 import westlake：{status['westlake_error']}")
-            st.caption("运行：`powershell .\\scripts\\setup_westlake_local.ps1`")
+            st.error(f"Simulation Python cannot import westlake: {status['westlake_error']}")
+            st.caption("Run: `powershell .\\scripts\\setup_westlake_local.ps1`")
         elif not status["numpy_ok"]:
-            st.error(f"numpy 版本不兼容：{status['numpy_info']}")
+            st.error(f"Incompatible numpy version: {status['numpy_info']}")
             st.code(
                 f'"{status["sim_python"]}" -m pip install "numpy<2"',
                 language="powershell",
             )
         if not status["plot_deps_ok"]:
-            st.error(f"绘图 Python 缺少依赖：{status['plot_deps_error']}")
-            st.caption("在启动 Streamlit 的环境中：`pip install matplotlib westlake`")
+            st.error(f"Plot Python is missing dependencies: {status['plot_deps_error']}")
+            st.caption("In the Streamlit runtime environment, run: `pip install matplotlib westlake`")
 
     if status["pickle_ok"] and status["plot_deps_ok"]:
-        st.info("可先点 **「仅绘图」** 快速出图；**「运行模拟」** 会重新计算（约 1～15 分钟）。")
+        st.info("Use **Plot Only** for fast rendering from existing results.")
     elif not status["simulation_ready"]:
-        st.warning("模拟环境未就绪时，只能使用已有 `res.pickle` 做 **「仅绘图」**。")
+        st.warning("Simulation environment is not ready; only plotting from existing `res.pickle` is available.")
 
     return status
 
@@ -406,13 +402,13 @@ def show_plot_results(plot_data: dict, settings, api_base: str | None = None) ->
         st.warning(plot_data["simulation_warning"])
 
     if plot_data.get("skipped"):
-        st.warning(f"绘图跳过: {plot_data.get('reason')}")
+        st.warning(f"Plot skipped: {plot_data.get('reason')}")
         if plot_data.get("stderr"):
             st.code(plot_data["stderr"])
-        st.caption("若 `example_simulation/res.pickle` 已存在，请尝试 **「仅绘图」**。")
+        st.caption("If `example_simulation/res.pickle` exists, try **Plot Only**.")
         return
     if plot_data.get("returncode", 1) != 0:
-        st.error("绘图失败")
+        st.error("Plotting failed")
         st.code(plot_data.get("stderr") or plot_data.get("stdout") or "")
         return
 
@@ -420,7 +416,7 @@ def show_plot_results(plot_data: dict, settings, api_base: str | None = None) ->
     if not images and plot_data.get("image_path"):
         images = [{"label": "plot", "path": plot_data["image_path"]}]
 
-    st.success(f"共 {len(images)} 张图 · run_id={plot_data.get('run_id')}")
+    st.success(f"{len(images)} image(s) · run_id={plot_data.get('run_id')}")
     cols = st.columns(min(3, len(images)) or 1)
     for idx, img in enumerate(images):
         with cols[idx % len(cols)]:
@@ -449,75 +445,25 @@ def show_plot_results(plot_data: dict, settings, api_base: str | None = None) ->
             if path.exists():
                 st.image(str(path), use_container_width=True)
             else:
-                st.warning("图像不可用")
+                st.warning("Image unavailable")
 
 
 def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> None:
-    st.header("Westlake 化学演化 + 绘图（本机）")
-    st.caption("在本机安装 westlake 后直接计算")
+    st.header("Westlake Evolution + Plotting (Local)")
+    st.caption("Runs directly on a local westlake installation.")
 
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
     _show_simulation_preflight(nautilus, sim_dir or None)
 
-    if allow_run_sim:
-        col_a, col_b = st.columns(2)
-        with col_a:
-            run_sim = st.button("运行模拟", type="primary", key="local_run")
-        with col_b:
-            plot_only = st.button("仅绘图", key="local_plot")
-    else:
-        run_sim = False
-        plot_only = st.button("仅绘图", type="primary", key="local_plot")
-        st.info("当前仅开放“仅绘图”。")
-
-    if run_sim:
-        with st.spinner("Westlake 模拟运行中，可能需要数分钟…"):
-            try:
-                if plot_after:
-                    data = nautilus.run_with_plot(
-                        sim_dir=sim_dir or None,
-                        use_evolution=use_evolution,
-                        species=species_list or None,
-                        plot_mode=plot_mode,
-                        include_images_base64=True,
-                        timeout=3600,
-                    )
-                else:
-                    data = nautilus.run(
-                        sim_dir=sim_dir or None,
-                        use_evolution=use_evolution,
-                        timeout=3600,
-                    )
-            except Exception as exc:
-                st.error(str(exc))
-                return
-
-        plot_data = data.get("plot") if plot_after else None
-        sim_ok = data["returncode"] == 0
-
-        if sim_ok:
-            st.success("模拟完成")
-        else:
-            st.error(f"模拟失败（returncode={data['returncode']}）")
-            if plot_data and not plot_data.get("skipped"):
-                st.warning("已尝试用现有 res.pickle 继续绘图（见下方）。")
-
-        with st.expander("运行日志", expanded=not sim_ok):
-            st.text(data.get("stdout") or "")
-            if data.get("stderr"):
-                st.code(data["stderr"])
-
-        if plot_after and plot_data:
-            show_plot_results(plot_data, settings)
-        elif plot_after:
-            st.warning("未生成绘图结果。若已有 res.pickle，请使用 **「仅绘图」**。")
+    plot_only = st.button("Plot Only", type="primary", key="local_plot")
+    st.info("Run Simulation is hidden; plotting uses existing result files only.")
 
     if plot_only:
-        with st.spinner("绘图…"):
+        with st.spinner("Plotting..."):
             try:
                 sim_path = nautilus.simulation_dir(sim_dir or None)
                 if not (sim_path / "res.pickle").exists():
-                    st.error(f"未找到 {sim_path / 'res.pickle'}，请先运行模拟")
+                    st.error(f"{sim_path / 'res.pickle'} not found. Please generate simulation results first.")
                     return
                 plot_data = nautilus.plotter.plot(
                     sim_dir=sim_path,
@@ -535,48 +481,17 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
 def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim: bool = True) -> None:
     from backend.services.simulation_api import RemoteSimulationClient
 
-    st.header("Westlake 化学演化 + 绘图（远程）")
-    st.caption(f"计算在服务器执行，访客无需安装 westlake · `{api_base}`")
+    st.header("Westlake Evolution + Plotting (Remote)")
+    st.caption(f"Computation runs on the server; visitors do not need local westlake · `{api_base}`")
 
     client = RemoteSimulationClient(api_base, api_key=api_key)
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
 
-    if allow_run_sim:
-        col_a, col_b = st.columns(2)
-        with col_a:
-            run_sim = st.button("运行模拟", type="primary", key="remote_run")
-        with col_b:
-            plot_only = st.button("仅绘图", key="remote_plot")
-    else:
-        run_sim = False
-        plot_only = st.button("仅绘图", type="primary", key="remote_plot")
-        st.info("访客模式仅开放“仅绘图”；实时模拟为管理员功能。")
-
-    if run_sim:
-        with st.spinner("正在请求远程 Westlake 服务（可能数分钟）…"):
-            try:
-                data = client.run(
-                    sim_dir=sim_dir or None,
-                    use_evolution=use_evolution,
-                    plot=plot_after,
-                    plot_mode=plot_mode,
-                    species=species_list or None,
-                )
-            except Exception as exc:
-                st.error(f"远程模拟失败: {exc}")
-                return
-
-        st.write(f"returncode: **{data.get('returncode')}**")
-        with st.expander("运行日志"):
-            st.text(data.get("stdout") or "")
-            if data.get("stderr"):
-                st.code(data["stderr"])
-
-        if plot_after and data.get("plot"):
-            show_plot_results(data["plot"], settings, api_base=api_base)
+    plot_only = st.button("Plot Only", type="primary", key="remote_plot")
+    st.info("Run Simulation is hidden; visitors can only plot from existing results.")
 
     if plot_only:
-        with st.spinner("远程绘图…"):
+        with st.spinner("Remote plotting..."):
             try:
                 plot_data = client.plot_only(
                     sim_dir=sim_dir or None,
@@ -595,21 +510,21 @@ def main() -> None:
     api_base, api_key = simulation_api_config()
     admin_run_enabled = simulation_admin_mode_enabled(on_cloud)
 
-    st.title("天体化学 Agent · ChemiVerse")
+    st.title("Astrochem Agent · ChemiVerse")
     if on_cloud:
         st.caption("☁️ Streamlit Cloud")
     else:
-        st.markdown("分子物性 / 反应网络检索 · Westlake 丰度演化可视化")
+        st.markdown("Molecular properties / reaction network lookup · Westlake abundance evolution visualization")
 
     sidebar_status(settings, db, nautilus)
     if api_base:
-        st.sidebar.success("演化图：远程 Westlake 服务")
+        st.sidebar.success("Evolution plots: Remote Westlake service")
 
-    tab1, tab2 = st.tabs(["🔬 分子查询", "📈 Westlake 演化图"])
+    tab1, tab2 = st.tabs(["🔬 Molecule Query", "📈 Westlake Evolution"])
 
     with tab1:
         # 分子查询与反应查询用子 tab，满足“查询分子和反应”的需求
-        st_tabs = st.tabs(["分子检索", "反应检索"])
+        st_tabs = st.tabs(["Molecule Search", "Reaction Search"])
         with st_tabs[0]:
             page_molecule_query(agent, db, settings)
         with st_tabs[1]:
