@@ -31,7 +31,7 @@ class RemoteSimulationClient:
             "plot": plot,
             "plot_mode": plot_mode,
             "species": species or [],
-            "include_images_base64": False,
+            "include_images_base64": True,
         }
         with httpx.Client(timeout=self.timeout) as client:
             response = client.post(
@@ -52,7 +52,7 @@ class RemoteSimulationClient:
             "sim_dir": sim_dir,
             "plot_mode": plot_mode,
             "species": species or [],
-            "include_images_base64": False,
+            "include_images_base64": True,
         }
         with httpx.Client(timeout=600) as client:
             response = client.post(
