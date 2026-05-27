@@ -42,6 +42,7 @@ def apply_starry_theme() -> None:
   --muted: #b8c8f0;
   --accent: #6ea6ff;
   --accent-2: #8a7bff;
+  --primary-color: #9ad8ff;
 }
 
 .stApp {
@@ -73,10 +74,80 @@ h1, h2, h3, h4, h5, h6, p, label, span, li, div {
   border-right: 1px solid rgba(148, 184, 255, 0.28);
 }
 
-[data-testid="stForm"], .stDataFrame, .stAlert, [data-testid="stExpander"], [data-testid="stMetric"] {
+[data-testid="stForm"], .stAlert, [data-testid="stExpander"] {
   background: var(--card);
   border: 1px solid var(--card-border);
   border-radius: 12px;
+}
+
+/* Query tables & evolution plot images */
+[data-testid="stDataFrame"],
+.stDataFrame {
+  background: rgba(18, 36, 78, 0.55) !important;
+  border: 1.5px solid rgba(154, 216, 255, 0.58) !important;
+  border-radius: 12px !important;
+  padding: 0.4rem !important;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(48, 82, 160, 0.22);
+}
+
+[data-testid="stDataFrame"] [data-testid="stDataFrameResizable"],
+[data-testid="stDataFrame"] [data-testid="glideDataEditor"] {
+  border-radius: 8px;
+}
+
+[data-testid="stImage"] {
+  background: rgba(18, 36, 78, 0.45);
+  border: 1.5px solid rgba(154, 216, 255, 0.58) !important;
+  border-radius: 12px;
+  padding: 0.55rem;
+  box-sizing: border-box;
+  box-shadow: 0 4px 16px rgba(48, 82, 160, 0.2);
+}
+
+[data-testid="stImage"] img {
+  border-radius: 8px;
+  border: 1px solid rgba(154, 216, 255, 0.38);
+  display: block;
+  width: 100%;
+}
+
+[data-testid="stMetric"] {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-sizing: border-box;
+  padding: 0.9rem 1.1rem 1rem !important;
+  min-height: 5.6rem;
+  overflow: visible;
+}
+
+[data-testid="stMetricLabel"] {
+  padding: 0 !important;
+  margin: 0 0 0.45rem 0 !important;
+  line-height: 1.35 !important;
+  white-space: normal;
+}
+
+[data-testid="stMetricLabel"] p,
+[data-testid="stMetricLabel"] div {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+[data-testid="stMetricValue"] {
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1.15 !important;
+}
+
+[data-testid="stMetricValue"] div {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+  align-self: stretch;
 }
 
 [data-baseweb="input"] > div,
@@ -130,8 +201,33 @@ textarea {
 }
 
 .stTabs [aria-selected="true"] {
-  border-bottom: 4px solid #9ad8ff !important;
-  box-shadow: inset 0 -1px 0 rgba(154, 216, 255, 0.45);
+  border-bottom: none !important;
+  background: rgba(45, 74, 148, 0.55);
+}
+
+/* Streamlit default tab indicator (orange) */
+.stTabs [data-baseweb="tab-highlight"] {
+  background-color: #9ad8ff !important;
+  height: 4px !important;
+}
+
+.stTabs [data-baseweb="tab-border"] {
+  display: none !important;
+}
+
+/* Checkboxes: replace Streamlit orange with blue */
+[data-testid="stCheckbox"] label[data-baseweb="checkbox"] > div:first-child {
+  background: rgba(34, 56, 112, 0.65) !important;
+  border-color: rgba(154, 216, 255, 0.85) !important;
+}
+
+[data-testid="stCheckbox"] label[data-baseweb="checkbox"][aria-checked="true"] > div:first-child {
+  background: linear-gradient(135deg, #5b9aff, #7a8dff) !important;
+  border-color: #9ad8ff !important;
+}
+
+[data-testid="stCheckbox"] svg {
+  fill: #f8fbff !important;
 }
 
 .stCaption, .stMarkdown small {
@@ -597,7 +693,7 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
 def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim: bool = True) -> None:
     from backend.services.simulation_api import RemoteSimulationClient
 
-    st.header("Westlake Evolution + Plotting (Remote)")
+    st.header("Westlake Evolution + Plotting")
 
     client = RemoteSimulationClient(api_base, api_key=api_key)
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
@@ -632,8 +728,6 @@ def main() -> None:
         st.markdown("Molecular properties / reaction network lookup · Westlake abundance evolution visualization")
 
     sidebar_status(settings, db, nautilus)
-    if api_base:
-        st.sidebar.success("Evolution plots: Remote Westlake service")
 
     tab1, tab2 = st.tabs(["🔬 Molecule Query", "📈 Westlake Evolution"])
 
