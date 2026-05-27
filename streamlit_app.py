@@ -11,7 +11,8 @@ import streamlit as st
 from backend.config import get_settings
 from backend.db.loader import AstroChemDatabase
 from backend.services.agent import AstroChemAgent
-from backend.services.reaction_display import param_records_for_dataframe, reaction_table_rows
+from backend.services.reaction_display import reaction_table_rows
+from streamlit_ui.pagination import paginated_dataframe
 
 st.set_page_config(
     page_title="天体化学 Agent",
@@ -126,7 +127,7 @@ def page_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) -> None:
             st.error(result.summary)
             return
 
-        st.success(f"解析为 **{result.resolved_key}**" + (" · LLM 摘要" if result.llm_used else ""))
+        st.success(f"解析为 **{result.resolved_key}**")
 
         m = result.molecule
         c1, c2, c3, c4 = st.columns(4)
@@ -134,18 +135,6 @@ def page_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) -> None:
         c2.metric("电荷", m.charge if m.charge is not None else "—")
         c3.metric("环数", m.num_rings if m.num_rings is not None else "—")
         c4.metric("原子数", m.num_atoms if m.num_atoms else "—")
-
-        st.subheader("标识与结构")
-        st.json(
-            {
-                "key": m.key,
-                "normal_formula": m.normal_formula,
-                "smiles": m.smiles,
-                "inchi": m.inchi,
-                "atoms": m.atoms,
-                "empirical_formulae": m.empirical_formulae,
-            }
-        )
 
         obs = m.observations or []
         if obs:
@@ -157,26 +146,27 @@ def page_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) -> None:
             if len(obs) > 200:
                 st.caption("仅显示前 200 条观测")
 
-        st.subheader("摘要")
-        st.markdown(result.summary)
-
         if include_reactions:
             st.subheader("相关反应")
             t1, t2 = st.tabs(
                 [f"作为反应物 ({len(result.reactions_as_reactant)})", f"作为产物 ({len(result.reactions_as_product)})"]
             )
 
-            def reaction_table(reactions):
+            def reaction_table(reactions, table_key: str):
                 rows = []
                 for rxn in reactions:
                     rows.extend(reaction_table_rows(rxn))
-                st.caption(f"共 {len(reactions)} 条反应 · {len(rows)} 行（多套速率来源分多行）")
-                st.dataframe(rows, use_container_width=True)
+                paginated_dataframe(
+                    rows,
+                    table_key=table_key,
+                    page_size=50,
+                    caption=f"共 {len(reactions)} 条反应 · {len(rows)} 行（多套速率来源分多行）",
+                )
 
             with t1:
-                reaction_table(result.reactions_as_reactant)
+                reaction_table(result.reactions_as_reactant, table_key="legacy_mol_reactant")
             with t2:
-                reaction_table(result.reactions_as_product)
+                reaction_table(result.reactions_as_product, table_key="legacy_mol_product")
 
         st.session_state["plot_species"] = result.resolved_key or query.strip()
 

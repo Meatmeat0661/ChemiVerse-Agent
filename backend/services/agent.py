@@ -40,6 +40,8 @@ def rule_based_summary(
     molecule: MoleculeRecord | None,
     as_reactant: list[ReactionRecord],
     as_product: list[ReactionRecord],
+    *,
+    list_reactions: bool = True,
 ) -> str:
     if not molecule:
         return f"未在分子库中找到与「{query}」匹配的物种（支持 key、SMILES、normal_formula、empirical_formulae）。"
@@ -64,20 +66,28 @@ def rule_based_summary(
         lines.append("- 观测源：数据库未提供")
 
     lines.append("")
-    lines.append(f"## 作为反应物（{len(as_reactant)} 条）")
-    if as_reactant:
-        for reaction in as_reactant:
-            lines.append(f"- {_summarize_reaction(reaction)}")
-    else:
-        lines.append("- 无匹配反应")
+    if list_reactions:
+        lines.append(f"## 作为反应物（{len(as_reactant)} 条）")
+        if as_reactant:
+            for reaction in as_reactant:
+                lines.append(f"- {_summarize_reaction(reaction)}")
+        else:
+            lines.append("- 无匹配反应")
 
-    lines.append("")
-    lines.append(f"## 作为产物（{len(as_product)} 条）")
-    if as_product:
-        for reaction in as_product:
-            lines.append(f"- {_summarize_reaction(reaction)}")
+        lines.append("")
+        lines.append(f"## 作为产物（{len(as_product)} 条）")
+        if as_product:
+            for reaction in as_product:
+                lines.append(f"- {_summarize_reaction(reaction)}")
+        else:
+            lines.append("- 无匹配反应")
     else:
-        lines.append("- 无匹配反应")
+        lines.append(
+            f"## 相关反应\n"
+            f"- 作为反应物：{len(as_reactant)} 条\n"
+            f"- 作为产物：{len(as_product)} 条\n"
+            f"- 详细速率见结果表格。"
+        )
 
     if key and key != query.strip():
         lines.append("")
@@ -104,7 +114,14 @@ class AstroChemAgent:
             names = species_names_for_molecule(molecule)
             as_reactant, as_product = find_reactions_for_species(self.db, names)
 
-        summary = rule_based_summary(query, key, molecule, as_reactant, as_product)
+        summary = rule_based_summary(
+            query,
+            key,
+            molecule,
+            as_reactant,
+            as_product,
+            list_reactions=not include_reactions,
+        )
         llm_used = False
 
         if use_llm and westlake_settings and westlake_settings.base_url:
