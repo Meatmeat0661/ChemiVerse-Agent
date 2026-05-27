@@ -22,7 +22,7 @@ class RemoteSimulationClient:
         sim_dir: str | None = None,
         use_evolution: bool = True,
         plot: bool = True,
-        plot_mode: str = "both",
+        plot_mode: str = "combined",
         species: list[str] | None = None,
     ) -> dict:
         body = {
@@ -31,7 +31,7 @@ class RemoteSimulationClient:
             "plot": plot,
             "plot_mode": plot_mode,
             "species": species or [],
-            "include_images_base64": True,
+            "include_images_base64": False,
         }
         with httpx.Client(timeout=self.timeout) as client:
             response = client.post(
@@ -45,14 +45,14 @@ class RemoteSimulationClient:
     def plot_only(
         self,
         sim_dir: str | None = None,
-        plot_mode: str = "both",
+        plot_mode: str = "combined",
         species: list[str] | None = None,
     ) -> dict:
         body = {
             "sim_dir": sim_dir,
             "plot_mode": plot_mode,
             "species": species or [],
-            "include_images_base64": True,
+            "include_images_base64": False,
         }
         with httpx.Client(timeout=600) as client:
             response = client.post(

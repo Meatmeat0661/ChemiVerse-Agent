@@ -283,7 +283,11 @@ def _simulation_form(settings, default_species_key: str = "plot_species"):
             "combined": "仅一张合并图",
             "separate": "仅每个物种单独一张",
         }[x],
-        index=0,
+        index=(
+            ["both", "combined", "separate"].index(settings.nautilus.default_plot_mode)
+            if settings.nautilus.default_plot_mode in ("both", "combined", "separate")
+            else 1
+        ),
     )
     use_evolution = st.checkbox("使用结构演化 (--use_evolution)", value=True)
     plot_after = st.checkbox("运行后自动绘图", value=True)
