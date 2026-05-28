@@ -22,7 +22,7 @@ from backend.services.reaction_display import reaction_table_rows
 
 
 st.set_page_config(
-    page_title="Astrochem Agent",
+    page_title="BIRDS-ARDCA",
     page_icon="🌌",
     layout="wide",
 )
@@ -236,10 +236,57 @@ textarea {
   fill: #f8fbff !important;
 }
 
+.birds-header {
+  margin: 0 0 0.75rem 0;
+}
+
+.birds-header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 0.45rem 1.5rem;
+}
+
+.birds-title {
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 2.45rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em;
+  color: #eef4ff !important;
+  line-height: 1.15 !important;
+}
+
+.birds-subtitle {
+  margin: 0 0 0.15rem 0 !important;
+  padding: 0 !important;
+  font-size: 1.05rem !important;
+  font-weight: 400 !important;
+  line-height: 1.35 !important;
+  color: #b8c8f0 !important;
+  text-align: right;
+  flex: 1 1 340px;
+}
+
 .stCaption, .stMarkdown small {
   color: var(--muted) !important;
 }
 </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_app_branding() -> None:
+    st.markdown(
+        """
+<div class="birds-header">
+  <div class="birds-header-inner">
+    <h1 class="birds-title">BIRDS-ARDCA</h1>
+    <p class="birds-subtitle">(Astrochemical Reaction Database and Chemical-evolution Agent under BIRDS-AI)</p>
+  </div>
+</div>
         """,
         unsafe_allow_html=True,
     )
@@ -727,11 +774,9 @@ def main() -> None:
     admin_run_enabled = simulation_admin_mode_enabled(on_cloud)
     apply_starry_theme()
 
-    st.title("Astrochem Agent · ChemiVerse")
+    render_app_branding()
     if on_cloud:
         st.caption("☁️ Streamlit Cloud")
-    else:
-        st.markdown("Molecular properties / reaction network lookup · Westlake abundance evolution visualization")
 
     sidebar_status(settings, db, nautilus)
 
