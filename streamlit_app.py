@@ -253,11 +253,11 @@ textarea {
 }
 
 .birds-subtitle {
-  margin: 0 0 0.28rem 0 !important;
+  margin: 0 0 0.18rem 0 !important;
   padding: 0 !important;
-  font-size: 1rem !important;
+  font-size: 1.65rem !important;
   font-weight: 400 !important;
-  line-height: 1.25 !important;
+  line-height: 1.2 !important;
   color: #b8c8f0 !important;
   text-align: left;
   white-space: nowrap;
