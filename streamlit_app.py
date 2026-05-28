@@ -698,15 +698,29 @@ def show_plot_results(
             try:
                 from backend.services.plot_explanation import attach_plot_explanations
 
-                plot_data = attach_plot_explanations(sim_dir_path, plot_data, settings.westlake)
+                from backend.services.nautilus import NautilusRunner
+
+                nautilus_runner = NautilusRunner(settings.nautilus)
+                plot_data = attach_plot_explanations(
+                    sim_dir_path,
+                    plot_data,
+                    settings.westlake,
+                    python_exe=nautilus_runner.python_executable(),
+                )
             except Exception as exc:
                 plot_data["explanation_error"] = str(exc)
 
-    if plot_data.get("explanation_error"):
-        st.caption(f"Plot explanation unavailable: {plot_data['explanation_error']}")
-
     explanations = plot_data.get("explanations") or {}
     llm_used = bool(plot_data.get("explanation_llm_used"))
+
+    if plot_data.get("explanation_error"):
+        st.warning(f"Plot statistics note: {plot_data['explanation_error']} (showing basic captions.)")
+
+    if explain_plots and not explanations:
+        st.warning(
+            "No plot explanation returned. Restart the simulation API after `git pull` and ensure "
+            "**AI plot explanation** is checked."
+        )
 
     images = plot_data.get("images") or []
     if not images and plot_data.get("image_path"):

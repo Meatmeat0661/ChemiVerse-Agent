@@ -8,7 +8,11 @@ from typing import Any
 import httpx
 
 from backend.config import WestlakeSettings
-from backend.services.plot_stats import extract_plot_stats, species_for_image_label
+from backend.services.plot_stats import (
+    extract_plot_stats,
+    extract_plot_stats_subprocess,
+    species_for_image_label,
+)
 
 PLOT_EXPLANATION_SYSTEM = """You explain Westlake/Nautilus gas-phase abundance evolution plots for astrochemistry users.
 Rules:
@@ -62,6 +66,20 @@ def _rule_based_explanation(label: str, stats: dict[str, Any], species: list[str
     return " ".join(parts)
 
 
+def _minimal_explanation(label: str, species: list[str]) -> str:
+    if label == "combined":
+        names = ", ".join(species) if species else "selected species"
+        return (
+            f"This figure shows log–log gas-phase abundance versus time for {names} "
+            "from the Westlake/Nautilus simulation. Rising or falling segments indicate "
+            "production or destruction in the coupled chemical network over astrophysical time."
+        )
+    return (
+        f"This figure tracks {label} abundance versus time (log scales) in the Westlake simulation. "
+        "Changes along the curve reflect how the network sources and sinks this species during evolution."
+    )
+
+
 async def _generate_image_explanation(
     settings: WestlakeSettings,
     *,
@@ -105,6 +123,8 @@ async def build_plot_explanations_async(
     sim_dir: Path,
     plot_data: dict[str, Any],
     westlake_settings: WestlakeSettings,
+    *,
+    python_exe: str | None = None,
 ) -> dict[str, Any]:
     """Return plot_data with explanations dict keyed by image label."""
     images = plot_data.get("images") or []
@@ -112,24 +132,35 @@ async def build_plot_explanations_async(
         return plot_data
 
     species = _normalize_plotted(plot_data)
+    stats: dict[str, Any] | None = None
+    stats_errors: list[str] = []
+
     try:
         stats = extract_plot_stats(sim_dir, species)
     except Exception as exc:
-        plot_data["explanations"] = {}
-        plot_data["explanation_error"] = str(exc)
-        plot_data["explanation_llm_used"] = False
-        return plot_data
+        stats_errors.append(str(exc))
+        if python_exe:
+            try:
+                stats = extract_plot_stats_subprocess(sim_dir, species, python_exe)
+            except Exception as sub_exc:
+                stats_errors.append(str(sub_exc))
+
+    if stats is None:
+        plot_data["explanation_error"] = "; ".join(stats_errors) if stats_errors else "Could not read res.pickle"
 
     explanations: dict[str, str] = {}
     llm_used = False
+    all_species = species or _normalize_plotted(plot_data)
 
     for img in images:
         label = str(img.get("label") or img.get("filename") or "plot")
         if label.endswith(".png"):
             label = Path(label).stem
-        sp = species_for_image_label(label, stats)
+        sp = species_for_image_label(label, stats) if stats else (
+            all_species if label == "combined" else [label]
+        )
         text: str | None = None
-        if westlake_settings.base_url:
+        if stats and westlake_settings.base_url:
             try:
                 text = await _generate_image_explanation(
                     westlake_settings,
@@ -142,12 +173,14 @@ async def build_plot_explanations_async(
             except Exception:
                 text = None
         if not text:
-            text = _rule_based_explanation(label, stats, sp)
+            if stats:
+                text = _rule_based_explanation(label, stats, sp)
+            else:
+                text = _minimal_explanation(label, sp)
         explanations[label] = text
 
     plot_data["explanations"] = explanations
     plot_data["explanation_llm_used"] = llm_used
-    plot_data["plot_stats"] = stats
     return plot_data
 
 
@@ -155,5 +188,11 @@ def attach_plot_explanations(
     sim_dir: Path,
     plot_data: dict[str, Any],
     westlake_settings: WestlakeSettings,
+    *,
+    python_exe: str | None = None,
 ) -> dict[str, Any]:
-    return asyncio.run(build_plot_explanations_async(sim_dir, plot_data, westlake_settings))
+    return asyncio.run(
+        build_plot_explanations_async(
+            sim_dir, plot_data, westlake_settings, python_exe=python_exe
+        )
+    )

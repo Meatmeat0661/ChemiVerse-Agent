@@ -157,7 +157,16 @@ def plot_simulation(body: PlotRequest):
         if body.include_explanations and result.get("returncode") == 0:
             from backend.services.plot_explanation import attach_plot_explanations
 
-            result = attach_plot_explanations(sim_dir, result, settings.westlake)
+            try:
+                result = attach_plot_explanations(
+                    sim_dir,
+                    result,
+                    settings.westlake,
+                    python_exe=nautilus.python_executable(),
+                )
+            except Exception as exc:  # noqa: BLE001
+                result["explanation_error"] = str(exc)
+                result.setdefault("explanations", {})
         return result
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

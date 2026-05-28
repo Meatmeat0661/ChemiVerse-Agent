@@ -743,11 +743,17 @@ def show_plot_results(
             except Exception as exc:
                 plot_data["explanation_error"] = str(exc)
 
-    if plot_data.get("explanation_error"):
-        st.caption(f"Plot explanation unavailable: {plot_data['explanation_error']}")
-
     explanations = plot_data.get("explanations") or {}
     llm_used = bool(plot_data.get("explanation_llm_used"))
+
+    if plot_data.get("explanation_error"):
+        st.warning(f"Plot statistics note: {plot_data['explanation_error']} (showing basic captions.)")
+
+    if explain_plots and not explanations:
+        st.warning(
+            "No plot explanation returned. Ensure the simulation API was restarted after the latest "
+            "`git pull`, and that **AI plot explanation** is checked."
+        )
 
     images = plot_data.get("images") or []
     if not images and plot_data.get("image_path"):
@@ -782,7 +788,7 @@ def show_plot_results(
 
             caption_text = explanations.get(label)
             if caption_text:
-                _render_plot_explanation(html.escape(caption_text), llm_used=llm_used)
+                _render_plot_explanation(caption_text, llm_used=llm_used)
 
 
 def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> None:

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
 import math
+import subprocess
 from pathlib import Path
 from typing import Any
+
+from backend.config import ROOT
 
 
 def _log10_safe(value: float) -> float | None:
@@ -83,3 +87,32 @@ def species_for_image_label(label: str, stats: dict[str, Any]) -> list[str]:
     if label in stats.get("species", {}):
         return [label]
     return stats.get("plotted_species", [])
+
+
+def extract_plot_stats_subprocess(
+    sim_dir: Path,
+    species: list[str],
+    python: str,
+    *,
+    t_start: float = 1.0,
+) -> dict[str, Any]:
+    """Read res.pickle using the same Python as Nautilus/westlake (API venv may lack westlake)."""
+    code = (
+        "import json\n"
+        "from pathlib import Path\n"
+        "from backend.services.plot_stats import extract_plot_stats\n"
+        f"stats = extract_plot_stats(Path({str(sim_dir)!r}), {species!r}, t_start={t_start})\n"
+        "print(json.dumps(stats))\n"
+    )
+    completed = subprocess.run(
+        [python, "-c", code],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError((completed.stderr or completed.stdout or "plot stats subprocess failed").strip())
+    line = (completed.stdout or "").strip().splitlines()[-1]
+    return json.loads(line)
