@@ -36,10 +36,19 @@ class PlotRequest(BaseModel):
     plot_mode: str = "combined"
     include_images_base64: bool = False
     include_explanations: bool = Field(
-        default=True,
-        description="Generate per-plot AI captions from res.pickle statistics (requires westlake LLM or uses fallback text)",
+        default=False,
+        description="If true, block plot response until captions are generated (prefer /api/simulation/plot/explain)",
     )
     run_id: str | None = None
+
+
+class PlotExplainRequest(BaseModel):
+    sim_dir: str | None = None
+    species: list[str] = Field(default_factory=list)
+    images: list[dict] = Field(
+        default_factory=list,
+        description='Plot image metadata, e.g. [{"label": "combined"}]',
+    )
 
 
 class Observation(BaseModel):

@@ -109,7 +109,7 @@ def extract_plot_stats_subprocess(
         cwd=str(ROOT),
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=30,
         check=False,
     )
     if completed.returncode != 0:

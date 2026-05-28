@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.config import ROOT, get_settings
 from backend.db.loader import AstroChemDatabase
-from backend.models import PlotRequest, QueryRequest, SimulationRequest
+from backend.models import PlotExplainRequest, PlotRequest, QueryRequest, SimulationRequest
 from backend.services.agent import AstroChemAgent
 from backend.services.nautilus import NautilusRunner
 
@@ -172,6 +172,36 @@ def plot_simulation(body: PlotRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except subprocess.TimeoutExpired as exc:
         raise HTTPException(status_code=504, detail="Plotting timed out") from exc
+
+
+@app.post("/api/simulation/plot/explain", dependencies=[Depends(verify_simulation_api_key)])
+def explain_plot(body: PlotExplainRequest):
+    """Generate plot captions only (fast follow-up after /api/simulation/plot)."""
+    sim_dir = nautilus.simulation_dir(body.sim_dir)
+    pickle_path = sim_dir / "res.pickle"
+    if not pickle_path.exists():
+        raise HTTPException(status_code=404, detail=f"No res.pickle in {sim_dir}")
+
+    images = body.images or [{"label": "combined"}]
+    plot_data: dict[str, object] = {
+        "returncode": 0,
+        "plotted": body.species,
+        "images": images,
+    }
+    from backend.services.plot_explanation import attach_plot_explanations
+
+    try:
+        return attach_plot_explanations(
+            sim_dir,
+            plot_data,
+            settings.westlake,
+            python_exe=nautilus.python_executable(),
+        )
+    except Exception as exc:  # noqa: BLE001
+        plot_data["explanation_error"] = str(exc)
+        plot_data["explanations"] = {}
+        plot_data["explanation_llm_used"] = False
+        return plot_data
 
 
 OUTPUTS = settings.nautilus.outputs_dir

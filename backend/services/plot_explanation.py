@@ -14,6 +14,8 @@ from backend.services.plot_stats import (
     species_for_image_label,
 )
 
+PLOT_LLM_TIMEOUT_SECONDS = 20
+
 PLOT_EXPLANATION_SYSTEM = """You explain Westlake/Nautilus gas-phase abundance evolution plots for astrochemistry users.
 Rules:
 1. Use only the JSON statistics provided; do not invent numerical values or observational claims.
@@ -111,7 +113,8 @@ async def _generate_image_explanation(
         "temperature": 0.35,
     }
 
-    async with httpx.AsyncClient(timeout=settings.timeout_seconds) as client:
+    timeout = httpx.Timeout(5.0, read=float(PLOT_LLM_TIMEOUT_SECONDS))
+    async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(url, headers=headers, json=body)
         response.raise_for_status()
         data = response.json()

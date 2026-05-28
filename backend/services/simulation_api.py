@@ -47,7 +47,7 @@ class RemoteSimulationClient:
         sim_dir: str | None = None,
         plot_mode: str = "combined",
         species: list[str] | None = None,
-        include_explanations: bool = True,
+        include_explanations: bool = False,
     ) -> dict:
         body = {
             "sim_dir": sim_dir,
@@ -59,6 +59,26 @@ class RemoteSimulationClient:
         with httpx.Client(timeout=600) as client:
             response = client.post(
                 f"{self.base_url}/api/simulation/plot",
+                json=body,
+                headers=self._headers(),
+            )
+            response.raise_for_status()
+            return response.json()
+
+    def explain_plot(
+        self,
+        sim_dir: str | None,
+        species: list[str] | None,
+        images: list[dict],
+    ) -> dict:
+        body = {
+            "sim_dir": sim_dir,
+            "species": species or [],
+            "images": images,
+        }
+        with httpx.Client(timeout=90) as client:
+            response = client.post(
+                f"{self.base_url}/api/simulation/plot/explain",
                 json=body,
                 headers=self._headers(),
             )

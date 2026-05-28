@@ -251,6 +251,35 @@ textarea {
   fill: #f8fbff !important;
 }
 
+/* Help icon (?) next to checkboxes */
+[data-testid="stTooltipIcon"] {
+  background: rgba(28, 48, 92, 0.85) !important;
+  border: 1.5px solid rgba(154, 180, 220, 0.55) !important;
+  border-radius: 50% !important;
+  width: 1.15rem !important;
+  height: 1.15rem !important;
+  min-width: 1.15rem !important;
+  min-height: 1.15rem !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: none !important;
+}
+
+[data-testid="stTooltipIcon"] svg {
+  display: none !important;
+}
+
+[data-testid="stTooltipIcon"]::after {
+  content: "?";
+  color: #9aa8c8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
 .birds-header {
   margin: 0 0 0.85rem 0;
 }
@@ -589,8 +618,8 @@ def _simulation_form(settings, default_species_key: str = "plot_species"):
 
     explain_plots = st.checkbox(
         "AI plot explanation",
-        value=True,
-        help="Generates a short caption per figure from simulation statistics (Westlake LLM if configured).",
+        value=False,
+        help="Adds captions after the plot is shown (may take ~10–30s). Uncheck for fastest plotting.",
     )
     st.info("Examples: `N2,NH3,HCN,H2CO` or `CO,CH3OH,CH3OCH3`", icon="💡")
     species_list = _species_list_from_text(species_text)
@@ -710,12 +739,64 @@ def _render_plot_explanation(text: str, *, llm_used: bool) -> None:
     )
 
 
+def _fetch_plot_explanations(
+    plot_data: dict,
+    settings,
+    *,
+    explain_plots: bool,
+    sim_dir_path: Path | None = None,
+    sim_dir_name: str | None = None,
+    api_base: str | None = None,
+    api_key: str = "",
+    species_list: list[str] | None = None,
+) -> dict:
+    if not explain_plots or plot_data.get("explanations"):
+        return plot_data
+
+    images = plot_data.get("images") or []
+    image_meta = [{"label": _plot_image_label(img)} for img in images]
+
+    with st.spinner("Generating plot explanations..."):
+        try:
+            if api_base:
+                from backend.services.simulation_api import RemoteSimulationClient
+
+                client = RemoteSimulationClient(api_base, api_key=api_key)
+                explained = client.explain_plot(
+                    sim_dir=sim_dir_name,
+                    species=species_list,
+                    images=image_meta,
+                )
+                plot_data["explanations"] = explained.get("explanations", {})
+                plot_data["explanation_llm_used"] = explained.get("explanation_llm_used", False)
+                if explained.get("explanation_error"):
+                    plot_data["explanation_error"] = explained["explanation_error"]
+            elif sim_dir_path is not None:
+                from backend.services.plot_explanation import attach_plot_explanations
+                from backend.services.nautilus import NautilusRunner
+
+                nautilus_runner = NautilusRunner(settings.nautilus)
+                plot_data = attach_plot_explanations(
+                    sim_dir_path,
+                    plot_data,
+                    settings.westlake,
+                    python_exe=nautilus_runner.python_executable(),
+                )
+        except Exception as exc:
+            plot_data["explanation_error"] = str(exc)
+
+    return plot_data
+
+
 def show_plot_results(
     plot_data: dict,
     settings,
     api_base: str | None = None,
     *,
     sim_dir_path: Path | None = None,
+    sim_dir_name: str | None = None,
+    api_key: str = "",
+    species_list: list[str] | None = None,
     explain_plots: bool = True,
 ) -> None:
     import base64
@@ -734,32 +815,12 @@ def show_plot_results(
         st.code(plot_data.get("stderr") or plot_data.get("stdout") or "")
         return
 
-    if explain_plots and not plot_data.get("explanations") and sim_dir_path is not None:
-        with st.spinner("Generating plot explanations..."):
-            try:
-                from backend.services.plot_explanation import attach_plot_explanations
-
-                plot_data = attach_plot_explanations(sim_dir_path, plot_data, settings.westlake)
-            except Exception as exc:
-                plot_data["explanation_error"] = str(exc)
-
-    explanations = plot_data.get("explanations") or {}
-    llm_used = bool(plot_data.get("explanation_llm_used"))
-
-    if plot_data.get("explanation_error"):
-        st.warning(f"Plot statistics note: {plot_data['explanation_error']} (showing basic captions.)")
-
-    if explain_plots and not explanations:
-        st.warning(
-            "No plot explanation returned. Ensure the simulation API was restarted after the latest "
-            "`git pull`, and that **AI plot explanation** is checked."
-        )
-
     images = plot_data.get("images") or []
     if not images and plot_data.get("image_path"):
         images = [{"label": "plot", "path": plot_data["image_path"]}]
 
     cols = st.columns(min(3, len(images)) or 1)
+    explanation_slots: list[tuple[str, object]] = []
     for idx, img in enumerate(images):
         with cols[idx % len(cols)]:
             label = _plot_image_label(img)
@@ -786,8 +847,35 @@ def show_plot_results(
                     else:
                         st.warning("Image unavailable")
 
-            caption_text = explanations.get(label)
-            if caption_text:
+            explanation_slots.append((label, st.empty()))
+
+    plot_data = _fetch_plot_explanations(
+        plot_data,
+        settings,
+        explain_plots=explain_plots,
+        sim_dir_path=sim_dir_path,
+        sim_dir_name=sim_dir_name,
+        api_base=api_base,
+        api_key=api_key,
+        species_list=species_list,
+    )
+
+    explanations = plot_data.get("explanations") or {}
+    llm_used = bool(plot_data.get("explanation_llm_used"))
+
+    if plot_data.get("explanation_error"):
+        st.warning(f"Plot statistics note: {plot_data['explanation_error']} (showing basic captions.)")
+
+    if explain_plots and not explanations:
+        st.warning(
+            "No plot explanation returned. Restart the simulation API after `git pull`, "
+            "or uncheck **AI plot explanation** for faster plotting."
+        )
+
+    for label, slot in explanation_slots:
+        caption_text = explanations.get(label)
+        if caption_text:
+            with slot:
                 _render_plot_explanation(caption_text, llm_used=llm_used)
 
 
@@ -821,6 +909,8 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
             plot_data,
             settings,
             sim_dir_path=sim_path,
+            sim_dir_name=sim_dir,
+            species_list=species_list,
             explain_plots=explain_plots,
         )
 
@@ -842,7 +932,7 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
                     sim_dir=sim_dir or None,
                     plot_mode=plot_mode,
                     species=species_list or None,
-                    include_explanations=explain_plots,
+                    include_explanations=False,
                 )
             except Exception as exc:
                 st.error(str(exc))
@@ -852,6 +942,9 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
             plot_data,
             settings,
             api_base=api_base,
+            api_key=api_key,
+            sim_dir_name=sim_dir,
+            species_list=species_list,
             explain_plots=explain_plots,
         )
 
