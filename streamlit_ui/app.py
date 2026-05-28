@@ -237,36 +237,38 @@ textarea {
 }
 
 .birds-header {
-  margin: 0 0 0.75rem 0;
+  margin: 0 0 0.85rem 0;
 }
 
 .birds-header-inner {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  justify-content: space-between;
   align-items: flex-end;
-  gap: 0.45rem 1.5rem;
+  justify-content: flex-start;
+  gap: 0.2rem 0.45rem;
+  max-width: 100%;
 }
 
 .birds-title {
   margin: 0 !important;
   padding: 0 !important;
-  font-size: 2.45rem !important;
+  font-size: 3.35rem !important;
   font-weight: 700 !important;
   letter-spacing: 0.04em;
   color: #eef4ff !important;
-  line-height: 1.15 !important;
+  line-height: 1.05 !important;
+  white-space: nowrap;
 }
 
 .birds-subtitle {
-  margin: 0 0 0.15rem 0 !important;
+  margin: 0 0 0.28rem 0 !important;
   padding: 0 !important;
-  font-size: 1.05rem !important;
+  font-size: 1rem !important;
   font-weight: 400 !important;
-  line-height: 1.35 !important;
+  line-height: 1.25 !important;
   color: #b8c8f0 !important;
-  text-align: right;
-  flex: 1 1 340px;
+  text-align: left;
+  white-space: nowrap;
 }
 
 .stCaption, .stMarkdown small {
