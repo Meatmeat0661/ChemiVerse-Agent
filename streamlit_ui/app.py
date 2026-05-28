@@ -118,6 +118,21 @@ h1, h2, h3, h4, h5, h6, p, label, span, li, div {
   width: 100%;
 }
 
+.plot-explanation-card {
+  background: rgba(18, 36, 78, 0.55);
+  border: 1.5px solid rgba(154, 216, 255, 0.5);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0 0.85rem 0;
+  color: #d8e4ff !important;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.plot-explanation-card strong {
+  color: #eef4ff !important;
+}
+
 [data-testid="stMetric"] {
   background: var(--card);
   border: 1px solid var(--card-border);
@@ -309,6 +324,13 @@ def _apply_secrets_to_settings(settings):
             settings.data.molecules_path = Path(data["molecules_path"])
         if data.get("reactions_path"):
             settings.data.reactions_path = Path(data["reactions_path"])
+        westlake = st.secrets.get("westlake", {})
+        if westlake.get("base_url"):
+            settings.westlake.base_url = str(westlake["base_url"]).strip()
+        if westlake.get("api_key"):
+            settings.westlake.api_key = str(westlake["api_key"])
+        if westlake.get("model"):
+            settings.westlake.model = str(westlake["model"])
     except Exception:
         pass
     return settings
@@ -565,9 +587,14 @@ def _simulation_form(settings, default_species_key: str = "plot_species"):
     use_evolution = True
     plot_after = True
 
+    explain_plots = st.checkbox(
+        "AI plot explanation",
+        value=True,
+        help="Generates a short caption per figure from simulation statistics (Westlake LLM if configured).",
+    )
     st.info("Examples: `N2,NH3,HCN,H2CO` or `CO,CH3OH,CH3OCH3`", icon="💡")
     species_list = _species_list_from_text(species_text)
-    return sim_dir, species_list, plot_mode, use_evolution, plot_after
+    return sim_dir, species_list, plot_mode, use_evolution, plot_after, explain_plots
 
 
 def load_simulation_catalog() -> list[dict]:
@@ -664,7 +691,33 @@ def _show_simulation_preflight(nautilus, sim_dir: str | None) -> dict[str, objec
     return status
 
 
-def show_plot_results(plot_data: dict, settings, api_base: str | None = None) -> None:
+def _plot_image_label(img: dict) -> str:
+    label = str(img.get("label") or img.get("filename") or "plot")
+    if label.endswith(".png"):
+        label = Path(label).stem
+    return label
+
+
+def _render_plot_explanation(text: str, *, llm_used: bool) -> None:
+    import html
+
+    source = "Westlake LLM" if llm_used else "rule-based summary"
+    body = html.escape(text).replace("\n", "<br/>")
+    st.markdown(
+        f'<div class="plot-explanation-card"><strong>About this plot</strong> '
+        f'<span style="opacity:0.75;font-size:0.85em">({source})</span><br/><br/>{body}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def show_plot_results(
+    plot_data: dict,
+    settings,
+    api_base: str | None = None,
+    *,
+    sim_dir_path: Path | None = None,
+    explain_plots: bool = True,
+) -> None:
     import base64
 
     if plot_data.get("simulation_warning"):
@@ -681,6 +734,21 @@ def show_plot_results(plot_data: dict, settings, api_base: str | None = None) ->
         st.code(plot_data.get("stderr") or plot_data.get("stdout") or "")
         return
 
+    if explain_plots and not plot_data.get("explanations") and sim_dir_path is not None:
+        with st.spinner("Generating plot explanations..."):
+            try:
+                from backend.services.plot_explanation import attach_plot_explanations
+
+                plot_data = attach_plot_explanations(sim_dir_path, plot_data, settings.westlake)
+            except Exception as exc:
+                plot_data["explanation_error"] = str(exc)
+
+    if plot_data.get("explanation_error"):
+        st.caption(f"Plot explanation unavailable: {plot_data['explanation_error']}")
+
+    explanations = plot_data.get("explanations") or {}
+    llm_used = bool(plot_data.get("explanation_llm_used"))
+
     images = plot_data.get("images") or []
     if not images and plot_data.get("image_path"):
         images = [{"label": "plot", "path": plot_data["image_path"]}]
@@ -688,39 +756,40 @@ def show_plot_results(plot_data: dict, settings, api_base: str | None = None) ->
     cols = st.columns(min(3, len(images)) or 1)
     for idx, img in enumerate(images):
         with cols[idx % len(cols)]:
-            st.caption(img.get("label") or img.get("filename") or "plot")
+            label = _plot_image_label(img)
+            st.caption(label)
 
             if img.get("base64"):
                 st.image(base64.b64decode(img["base64"]), use_container_width=True)
-                continue
-
-            url = img.get("url")
-            if url and api_base and url.startswith("/"):
-                url = api_base + url
-            if url:
-                st.image(url, use_container_width=True)
-                continue
-
-            from pathlib import Path as _Path
-
-            path = _Path(img.get("path") or "")
-            if not path.exists() and img.get("filename"):
-                out_root = settings.nautilus.outputs_dir
-                if not out_root.is_absolute():
-                    out_root = ROOT / out_root
-                path = out_root / plot_data.get("run_id", "") / img["filename"]
-
-            if path.exists():
-                st.image(str(path), use_container_width=True)
             else:
-                st.warning("Image unavailable")
+                url = img.get("url")
+                if url and api_base and url.startswith("/"):
+                    url = api_base + url
+                if url:
+                    st.image(url, use_container_width=True)
+                else:
+                    path = Path(img.get("path") or "")
+                    if not path.exists() and img.get("filename"):
+                        out_root = settings.nautilus.outputs_dir
+                        if not out_root.is_absolute():
+                            out_root = ROOT / out_root
+                        path = out_root / plot_data.get("run_id", "") / img["filename"]
+
+                    if path.exists():
+                        st.image(str(path), use_container_width=True)
+                    else:
+                        st.warning("Image unavailable")
+
+            caption_text = explanations.get(label)
+            if caption_text:
+                _render_plot_explanation(html.escape(caption_text), llm_used=llm_used)
 
 
 def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> None:
     st.header("Westlake Evolution + Plotting (Local)")
     st.caption("Runs directly on a local westlake installation.")
 
-    sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
+    sim_dir, species_list, plot_mode, use_evolution, plot_after, explain_plots = _simulation_form(settings)
     _show_simulation_preflight(nautilus, sim_dir or None)
 
     plot_only = _plot_action_button("local_plot")
@@ -742,7 +811,12 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
                 st.error(str(exc))
                 return
 
-        show_plot_results(plot_data, settings)
+        show_plot_results(
+            plot_data,
+            settings,
+            sim_dir_path=sim_path,
+            explain_plots=explain_plots,
+        )
 
 
 def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim: bool = True) -> None:
@@ -751,7 +825,7 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
     st.header("Westlake Evolution + Plotting")
 
     client = RemoteSimulationClient(api_base, api_key=api_key)
-    sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
+    sim_dir, species_list, plot_mode, use_evolution, plot_after, explain_plots = _simulation_form(settings)
 
     plot_only = _plot_action_button("remote_plot")
 
@@ -762,12 +836,18 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
                     sim_dir=sim_dir or None,
                     plot_mode=plot_mode,
                     species=species_list or None,
+                    include_explanations=explain_plots,
                 )
             except Exception as exc:
                 st.error(str(exc))
                 return
 
-        show_plot_results(plot_data, settings, api_base=api_base)
+        show_plot_results(
+            plot_data,
+            settings,
+            api_base=api_base,
+            explain_plots=explain_plots,
+        )
 
 
 def main() -> None:

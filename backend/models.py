@@ -35,6 +35,10 @@ class PlotRequest(BaseModel):
     species: list[str] = Field(default_factory=list)
     plot_mode: str = "combined"
     include_images_base64: bool = False
+    include_explanations: bool = Field(
+        default=True,
+        description="Generate per-plot AI captions from res.pickle statistics (requires westlake LLM or uses fallback text)",
+    )
     run_id: str | None = None
 
 

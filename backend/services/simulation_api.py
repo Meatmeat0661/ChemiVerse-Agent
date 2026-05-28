@@ -47,12 +47,14 @@ class RemoteSimulationClient:
         sim_dir: str | None = None,
         plot_mode: str = "combined",
         species: list[str] | None = None,
+        include_explanations: bool = True,
     ) -> dict:
         body = {
             "sim_dir": sim_dir,
             "plot_mode": plot_mode,
             "species": species or [],
             "include_images_base64": True,
+            "include_explanations": include_explanations,
         }
         with httpx.Client(timeout=600) as client:
             response = client.post(

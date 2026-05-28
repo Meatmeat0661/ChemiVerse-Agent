@@ -147,13 +147,18 @@ def plot_simulation(body: PlotRequest):
                 detail=f"No res.pickle in {sim_dir}. Run simulation first.",
             )
         species = body.species or None
-        return nautilus.plotter.plot(
+        result = nautilus.plotter.plot(
             sim_dir=sim_dir,
             species=species,
             run_id=body.run_id,
             mode=body.plot_mode,  # type: ignore[arg-type]
             include_images_base64=body.include_images_base64,
         )
+        if body.include_explanations and result.get("returncode") == 0:
+            from backend.services.plot_explanation import attach_plot_explanations
+
+            result = attach_plot_explanations(sim_dir, result, settings.westlake)
+        return result
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except subprocess.TimeoutExpired as exc:
