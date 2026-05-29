@@ -598,6 +598,68 @@ def _plot_action_buttons(plot_key: str, explain_key: str) -> tuple[bool, bool]:
     return plot_clicked, explain_clicked
 
 
+def _load_simulation_conditions(
+    *,
+    sim_dir_path: Path | None = None,
+    sim_dir_name: str | None = None,
+    api_base: str | None = None,
+    api_key: str = "",
+) -> dict | None:
+    try:
+        if api_base:
+            from backend.services.simulation_api import RemoteSimulationClient
+
+            client = RemoteSimulationClient(api_base, api_key=api_key)
+            return client.get_conditions(sim_dir_name or "example_simulation")
+        if sim_dir_path is not None:
+            from backend.services.simulation_conditions import load_simulation_conditions
+
+            return load_simulation_conditions(sim_dir_path)
+    except Exception as exc:
+        return {"error": str(exc)}
+    return None
+
+
+def _render_simulation_conditions(
+    info: dict | None,
+    *,
+    species_list: list[str] | None = None,
+) -> None:
+    if not info:
+        return
+    if info.get("error"):
+        st.caption(f"Physical conditions unavailable: {info['error']}")
+        return
+    from backend.services.simulation_conditions import conditions_to_markdown
+
+    st.markdown("#### Physical conditions")
+    body = conditions_to_markdown(info)
+    if species_list:
+        body += f"\n\n**Species in this figure:** {', '.join(species_list)}"
+    st.info(body)
+
+
+def _attach_simulation_conditions(
+    plot_data: dict,
+    *,
+    sim_dir_path: Path | None = None,
+    sim_dir_name: str | None = None,
+    api_base: str | None = None,
+    api_key: str = "",
+) -> dict:
+    if plot_data.get("simulation_conditions"):
+        return plot_data
+    info = _load_simulation_conditions(
+        sim_dir_path=sim_dir_path,
+        sim_dir_name=sim_dir_name,
+        api_base=api_base,
+        api_key=api_key,
+    )
+    if info:
+        plot_data["simulation_conditions"] = info
+    return plot_data
+
+
 def _hydrate_remote_plot_images(plot_data: dict, api_base: str) -> dict:
     """Fetch PNG bytes server-side (avoids huge base64 in /plot JSON + HTTPS mixed-content)."""
     import base64
@@ -711,6 +773,11 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
             show_plot_results(plot_data, settings, sim_dir_path=sim_path, sim_dir_name=sim_dir)
             return
 
+        plot_data = _attach_simulation_conditions(
+            plot_data,
+            sim_dir_path=sim_path,
+            sim_dir_name=sim_dir,
+        )
         _store_evolution_plot_ctx(
             plot_data,
             sim_dir_name=sim_dir,
@@ -774,6 +841,12 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
             )
             return
 
+        plot_data = _attach_simulation_conditions(
+            plot_data,
+            sim_dir_name=sim_dir,
+            api_base=api_base,
+            api_key=api_key,
+        )
         _store_evolution_plot_ctx(
             plot_data,
             sim_dir_name=sim_dir,
@@ -982,6 +1055,16 @@ def show_plot_results(
         st.error("Plotting failed")
         st.code(plot_data.get("stderr") or plot_data.get("stdout") or "")
         return
+
+    conditions = plot_data.get("simulation_conditions")
+    if not conditions:
+        conditions = _load_simulation_conditions(
+            sim_dir_path=sim_dir_path,
+            sim_dir_name=sim_dir_name,
+            api_base=api_base,
+            api_key=api_key,
+        )
+    _render_simulation_conditions(conditions, species_list=species_list or plot_data.get("plotted"))
 
     images = plot_data.get("images") or []
     if not images and plot_data.get("image_path"):

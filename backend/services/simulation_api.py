@@ -138,6 +138,19 @@ class RemoteSimulationClient:
                 raise
             return response.json()
 
+    def get_conditions(self, sim_dir: str | None = None) -> dict:
+        params = {}
+        if sim_dir:
+            params["sim_dir"] = sim_dir
+        with httpx.Client(timeout=30) as client:
+            response = client.get(
+                f"{self.base_url}/api/simulation/conditions",
+                params=params,
+                headers=self._headers(),
+            )
+            response.raise_for_status()
+            return response.json()
+
     def health(self) -> dict:
         with httpx.Client(timeout=30) as client:
             response = client.get(f"{self.base_url}/api/health")

@@ -210,6 +210,17 @@ if not OUTPUTS.is_absolute():
 OUTPUTS.mkdir(parents=True, exist_ok=True)
 
 
+@app.get("/api/simulation/conditions", dependencies=[Depends(verify_simulation_api_key)])
+def simulation_conditions(sim_dir: str | None = None):
+    """Return physical setup metadata for a Westlake/Nautilus simulation directory."""
+    from backend.services.simulation_conditions import load_simulation_conditions
+
+    path = nautilus.simulation_dir(sim_dir)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Simulation directory not found: {path}")
+    return load_simulation_conditions(path)
+
+
 @app.get("/api/outputs/{run_id}/{filename}")
 def get_output_image(run_id: str, filename: str):
     if ".." in run_id or ".." in filename or "/" in filename or "\\" in filename:
