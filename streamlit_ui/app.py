@@ -592,11 +592,7 @@ def _load_simulation_conditions(
     return None
 
 
-def _render_simulation_conditions(
-    info: dict | None,
-    *,
-    species_list: list[str] | None = None,
-) -> None:
+def _render_simulation_conditions(info: dict | None) -> None:
     if not info:
         return
     if info.get("error"):
@@ -605,10 +601,7 @@ def _render_simulation_conditions(
     from backend.services.simulation_conditions import conditions_to_markdown
 
     st.markdown("#### Physical conditions")
-    body = conditions_to_markdown(info)
-    if species_list:
-        body += f"\n\n**Species in this figure:** {', '.join(species_list)}"
-    st.info(body)
+    st.info(conditions_to_markdown(info))
 
 
 def _attach_simulation_conditions(
@@ -1130,7 +1123,7 @@ def show_plot_results(
             api_base=api_base,
             api_key=api_key,
         )
-    _render_simulation_conditions(conditions, species_list=species_list or plot_data.get("plotted"))
+    _render_simulation_conditions(conditions)
 
     plot_data = _ensure_plot_images_displayable(
         plot_data, api_base, api_key=api_key

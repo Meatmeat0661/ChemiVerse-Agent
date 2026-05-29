@@ -135,26 +135,51 @@ def load_simulation_conditions(sim_dir: Path) -> dict[str, Any]:
     return conditions
 
 
+def _phase_processes_line(model: str) -> str:
+    """Whether gas / surface / mantle chemistry is included in the network."""
+    key = (model or "").strip().lower()
+    gas, surface, mantle = True, False, False
+    if key == "simple":
+        pass
+    elif key == "three phase":
+        surface, mantle = True, True
+    else:
+        surface = True
+    return (
+        f"Gas phase: {'yes' if gas else 'no'} · "
+        f"Surface: {'yes' if surface else 'no'} · "
+        f"Mantle: {'yes' if mantle else 'no'}"
+    )
+
+
 def conditions_to_markdown(info: dict[str, Any]) -> str:
-    """Compact markdown block for Streamlit."""
-    lines = [
-        f"**Simulation case:** `{info.get('sim_dir', '')}`",
-        f"**Chemical model:** {info.get('model_label', '')}",
-        f"**Medium:** {info.get('medium_mode', '')}",
-        f"**n(H):** {info.get('n_H_cm3', '—')}  ·  **T:** {info.get('T_K', '—')}  ·  **A_V:** {info.get('Av_mag', '—')}",
-        f"**Cosmic-ray ionization rate zeta_CR:** {_fmt_sci(float(info['zeta_cr_s-1']))} s^-1"
-        if info.get("zeta_cr_s-1") is not None
-        else "**Cosmic-ray ionization rate zeta_CR:** —",
-        f"**Integration time span:** {info.get('time_span_yr', info.get('integration_t_end_yr', '—'))} "
-        f"(t_end ≈ {_fmt_sci(float(info['integration_t_end_yr']))} yr)"
-        if info.get("integration_t_end_yr") is not None
-        else f"**Integration time span:** {info.get('time_span_yr', '—')}",
-        f"**Plotted quantities:** {info.get('plot_abundance_definition', '')}",
-        f"**Network:** {info.get('processes_note', '')}",
+    """Compact markdown for Streamlit Physical conditions (six fields only)."""
+    lines: list[str] = [
+        f"**Density n(H):** {info.get('n_H_cm3', '—')}",
+        f"**Temperature:** {info.get('T_K', '—')}",
     ]
+    zeta = info.get("zeta_cr_s-1")
+    if zeta is not None:
+        lines.append(f"**Cosmic-ray ionization rate zeta_CR:** {_fmt_sci(float(zeta))} s^-1")
+    else:
+        lines.append("**Cosmic-ray ionization rate ζ_CR:** —")
+
     preview = info.get("initial_abundances_preview") or []
     if preview:
-        lines.append("**Initial abundances (excerpt, relative to H):** " + "; ".join(preview[:6]))
-        if len(preview) > 6:
-            lines[-1] += " …"
+        ab = "; ".join(p for p in preview if p != "…")
+        if any(p == "…" for p in preview):
+            ab = f"{ab}; …" if ab else "…"
+        lines.append(f"**Initial abundances (relative to H):** {ab}")
+    else:
+        lines.append("**Initial abundances:** —")
+
+    time_span = info.get("time_span_yr")
+    if time_span:
+        lines.append(f"**Time range:** {time_span}")
+    elif info.get("integration_t_end_yr") is not None:
+        lines.append(f"**Time range:** 0 → {_fmt_sci(float(info['integration_t_end_yr']))} yr")
+    else:
+        lines.append("**Time range:** —")
+
+    lines.append(f"**Phases / processes:** {_phase_processes_line(str(info.get('model', '')))}")
     return "\n\n".join(lines)
