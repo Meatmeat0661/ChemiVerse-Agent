@@ -49,7 +49,7 @@ class RemoteSimulationClient:
         species: list[str] | None = None,
         *,
         include_explanations: bool = False,
-        include_images_base64: bool = False,
+        include_images_base64: bool = True,
     ) -> dict:
         """Plot from existing res.pickle. Explanations are separate (explain_plot)."""
         body = {

@@ -558,6 +558,13 @@ def simulation_admin_mode_enabled(on_cloud: bool) -> bool:
 EVOLUTION_PLOT_CTX = "evolution_plot_ctx"
 
 
+def _plot_images_ready(plot_data: dict) -> bool:
+    images = plot_data.get("images") or []
+    if not images:
+        return bool(plot_data.get("image_path"))
+    return any(img.get("base64") for img in images)
+
+
 def _evolution_plot_ready() -> bool:
     ctx = st.session_state.get(EVOLUTION_PLOT_CTX)
     if not ctx:
@@ -565,8 +572,7 @@ def _evolution_plot_ready() -> bool:
     plot_data = ctx.get("plot_data") or {}
     if plot_data.get("returncode", 1) != 0:
         return False
-    images = plot_data.get("images") or []
-    return bool(images or plot_data.get("image_path"))
+    return _plot_images_ready(plot_data)
 
 
 def _plot_action_buttons(plot_key: str, explain_key: str) -> tuple[bool, bool]:
@@ -660,8 +666,13 @@ def _attach_simulation_conditions(
     return plot_data
 
 
-def _hydrate_remote_plot_images(plot_data: dict, api_base: str) -> dict:
-    """Fetch PNG bytes server-side (avoids huge base64 in /plot JSON + HTTPS mixed-content)."""
+def _hydrate_remote_plot_images(
+    plot_data: dict,
+    api_base: str,
+    *,
+    api_key: str = "",
+) -> dict:
+    """Server-side fetch when base64 missing (browser cannot load http:// on HTTPS pages)."""
     import base64
 
     import httpx
@@ -670,8 +681,10 @@ def _hydrate_remote_plot_images(plot_data: dict, api_base: str) -> dict:
     if not images or not api_base:
         return plot_data
 
+    headers = {"X-API-Key": api_key} if api_key else {}
     base = api_base.rstrip("/")
-    with httpx.Client(timeout=60) as client:
+    errors: list[str] = []
+    with httpx.Client(timeout=120) as client:
         for img in images:
             if img.get("base64"):
                 continue
@@ -680,11 +693,13 @@ def _hydrate_remote_plot_images(plot_data: dict, api_base: str) -> dict:
                 continue
             url = f"{base}{rel}" if rel.startswith("/") else rel
             try:
-                response = client.get(url)
+                response = client.get(url, headers=headers)
                 response.raise_for_status()
                 img["base64"] = base64.b64encode(response.content).decode("ascii")
-            except Exception:
-                pass
+            except Exception as exc:
+                errors.append(f"{url}: {exc}")
+    if errors and not _plot_images_ready(plot_data):
+        plot_data["image_load_error"] = "; ".join(errors[:3])
     return plot_data
 
 
@@ -773,18 +788,20 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
             show_plot_results(plot_data, settings, sim_dir_path=sim_path, sim_dir_name=sim_dir)
             return
 
-        plot_data = _attach_simulation_conditions(
-            plot_data,
-            sim_dir_path=sim_path,
-            sim_dir_name=sim_dir,
-        )
         _store_evolution_plot_ctx(
             plot_data,
             sim_dir_name=sim_dir,
             species_list=species_list,
             sim_dir_path=sim_path,
         )
-        st.rerun()
+        show_plot_results(
+            plot_data,
+            settings,
+            sim_dir_path=sim_path,
+            sim_dir_name=sim_dir,
+            species_list=species_list,
+        )
+        return
 
     if explain_clicked and _evolution_plot_ready():
         ctx = st.session_state[EVOLUTION_PLOT_CTX]
@@ -798,7 +815,6 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
                 species_list=ctx.get("species_list"),
             )
         st.session_state[EVOLUTION_PLOT_CTX] = ctx
-        st.rerun()
 
     _render_stored_evolution_plot(settings)
 
@@ -814,16 +830,18 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
 
     if plot_clicked:
         try:
-            with st.spinner("Drawing plot on server (no AI captions)..."):
+            with st.spinner("Plotting on server (first run may take 1–2 min)..."):
                 plot_data = client.plot_only(
                     sim_dir=sim_dir or None,
                     plot_mode=plot_mode,
                     species=species_list or None,
                     include_explanations=False,
-                    include_images_base64=False,
+                    include_images_base64=True,
                 )
-            with st.spinner("Loading images..."):
-                plot_data = _hydrate_remote_plot_images(plot_data, api_base)
+            if not _plot_images_ready(plot_data):
+                plot_data = _hydrate_remote_plot_images(
+                    plot_data, api_base, api_key=api_key
+                )
         except Exception as exc:
             st.error(str(exc))
             st.session_state.pop(EVOLUTION_PLOT_CTX, None)
@@ -841,12 +859,9 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
             )
             return
 
-        plot_data = _attach_simulation_conditions(
-            plot_data,
-            sim_dir_name=sim_dir,
-            api_base=api_base,
-            api_key=api_key,
-        )
+        if plot_data.get("from_cache"):
+            st.caption("Plot served from server cache (fast).")
+
         _store_evolution_plot_ctx(
             plot_data,
             sim_dir_name=sim_dir,
@@ -854,7 +869,15 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
             api_base=api_base,
             api_key=api_key,
         )
-        st.rerun()
+        show_plot_results(
+            plot_data,
+            settings,
+            api_base=api_base,
+            api_key=api_key,
+            sim_dir_name=sim_dir,
+            species_list=species_list,
+        )
+        return
 
     if explain_clicked and _evolution_plot_ready():
         ctx = st.session_state[EVOLUTION_PLOT_CTX]
@@ -868,7 +891,6 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
                 species_list=ctx.get("species_list"),
             )
         st.session_state[EVOLUTION_PLOT_CTX] = ctx
-        st.rerun()
 
     _render_stored_evolution_plot(settings, default_api_base=api_base, default_api_key=api_key)
 
@@ -1066,9 +1088,22 @@ def show_plot_results(
         )
     _render_simulation_conditions(conditions, species_list=species_list or plot_data.get("plotted"))
 
+    if plot_data.get("image_load_error"):
+        st.error(f"Could not load plot image: {plot_data['image_load_error']}")
+
     images = plot_data.get("images") or []
     if not images and plot_data.get("image_path"):
         images = [{"label": "plot", "path": plot_data["image_path"]}]
+
+    if not _plot_images_ready(plot_data):
+        st.warning(
+            "No displayable image in the response. "
+            "Redeploy Streamlit, update the simulation API (`git pull` + restart uvicorn), "
+            "and ensure `POST /api/simulation/plot` returns `images[].base64`."
+        )
+        if plot_data.get("stderr"):
+            st.code(plot_data["stderr"])
+        return
 
     cols = st.columns(min(3, len(images)) or 1)
     explanation_slots: list[tuple[str, object]] = []

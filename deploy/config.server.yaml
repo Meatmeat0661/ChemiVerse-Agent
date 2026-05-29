@@ -14,9 +14,10 @@ nautilus:
   plot_script: "backend/scripts/plot_westlake.py"
   default_sim_dir: "example_simulation"
   default_species: "CO,CH3OH,CH3OCH3"
-  default_plot_mode: "both"
+  default_plot_mode: "combined"
   outputs_dir: "outputs"
   python: "/opt/astrochem-agent/.venv/bin/python"
+  plot_python: "/opt/astrochem-agent/.venv/bin/python"
 
 server:
   host: "0.0.0.0"

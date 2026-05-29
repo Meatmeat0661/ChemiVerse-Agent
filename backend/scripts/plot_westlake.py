@@ -43,7 +43,7 @@ def plot_combined(res, species: list[str], output: Path, t_start: float) -> list
     _style_axes(ax, "Westlake abundance evolution")
     fig.tight_layout()
     output.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output, dpi=150)
+    fig.savefig(output, dpi=100)
     plt.close(fig)
     return plotted
 
@@ -57,7 +57,7 @@ def plot_separate(res, species: list[str], out_dir: Path, t_start: float) -> lis
         _style_axes(ax, f"{name} abundance evolution")
         fig.tight_layout()
         path = out_dir / f"{_safe_filename(name)}.png"
-        fig.savefig(path, dpi=150)
+        fig.savefig(path, dpi=100)
         plt.close(fig)
         written.append((name, path))
     return written
