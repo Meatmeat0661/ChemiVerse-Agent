@@ -167,8 +167,32 @@ h1, h2, h3, h4, h5, h6, p, label, span, li, div {
   margin: 0 !important;
 }
 
-div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+div[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > div[data-testid="column"] {
   align-self: stretch;
+}
+
+/* Evolution plot action buttons — equal-width side by side */
+div[data-testid="stHorizontalBlock"]:has(.st-key-local_plot),
+div[data-testid="stHorizontalBlock"]:has(.st-key-remote_plot) {
+  gap: 0.75rem !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.st-key-local_plot) > div[data-testid="column"],
+div[data-testid="stHorizontalBlock"]:has(.st-key-remote_plot) > div[data-testid="column"] {
+  flex: 1 1 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  align-self: auto !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.st-key-local_plot) .stButton > button,
+div[data-testid="stHorizontalBlock"]:has(.st-key-remote_plot) .stButton > button {
+  width: 100% !important;
+  white-space: nowrap !important;
+  font-size: 1.05rem !important;
+  min-height: 3rem !important;
+  padding: 0.75rem 1rem !important;
+  letter-spacing: 0.02em !important;
 }
 
 [data-baseweb="input"] > div,
@@ -467,10 +491,10 @@ def _evolution_plot_ready() -> bool:
 
 def _plot_action_buttons(plot_key: str, explain_key: str) -> tuple[bool, bool]:
     ready = _evolution_plot_ready()
-    c1, c2 = st.columns(2)
-    with c1:
+    col_plot, col_explain = st.columns(2, gap="medium")
+    with col_plot:
         plot_clicked = st.button("Plot", type="primary", key=plot_key, use_container_width=True)
-    with c2:
+    with col_explain:
         if ready:
             explain_clicked = st.button(
                 "AI Explanation",
@@ -485,8 +509,9 @@ def _plot_action_buttons(plot_key: str, explain_key: str) -> tuple[bool, bool]:
                 disabled=True,
                 key=explain_key,
                 use_container_width=True,
-                help="Plot first, then click here to generate a caption.",
             )
+    if not ready:
+        st.caption("After plotting succeeds, **AI Explanation** unlocks (blue, same as Plot).")
     return plot_clicked, explain_clicked
 
 
