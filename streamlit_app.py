@@ -686,6 +686,7 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
             species_list=species_list,
             sim_dir_path=sim_path,
         )
+        st.rerun()
 
     if explain_clicked and _evolution_plot_ready():
         ctx = st.session_state[EVOLUTION_PLOT_CTX]
@@ -699,6 +700,7 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
                 species_list=ctx.get("species_list"),
             )
         st.session_state[EVOLUTION_PLOT_CTX] = ctx
+        st.rerun()
 
     _render_stored_evolution_plot(settings)
 
@@ -745,6 +747,7 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
             api_base=api_base,
             api_key=api_key,
         )
+        st.rerun()
 
     if explain_clicked and _evolution_plot_ready():
         ctx = st.session_state[EVOLUTION_PLOT_CTX]
@@ -758,6 +761,7 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
                 species_list=ctx.get("species_list"),
             )
         st.session_state[EVOLUTION_PLOT_CTX] = ctx
+        st.rerun()
 
     _render_stored_evolution_plot(settings, default_api_base=api_base, default_api_key=api_key)
 
