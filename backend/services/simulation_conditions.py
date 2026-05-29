@@ -12,6 +12,18 @@ _MODEL_LABELS = {
     "three phase": "Three-phase (gas + surface + mantle)",
 }
 
+_PROCESS_NOTES = {
+    "simple": "Gas-phase reactions only (gas_reactions.in).",
+    "two phase": (
+        "Gas-phase reactions plus grain-surface chemistry "
+        "(gas_reactions.in, grain_reactions.in, surface_parameters.in)."
+    ),
+    "three phase": (
+        "Gas-phase, grain-surface, and ice-mantle chemistry "
+        "(gas_reactions.in, grain_reactions.in, surface_parameters.in)."
+    ),
+}
+
 
 def _fmt_sci(value: float, *, sig: int = 2) -> str:
     if value == 0:
@@ -69,11 +81,18 @@ def _read_initial_abundances(path: Path, *, max_lines: int = 12) -> list[str]:
         line = line.strip()
         if not line or line.startswith("!"):
             continue
-        if "=" not in line:
+        line = line.split("!")[0].strip()
+        if not line:
             continue
-        name, _, rest = line.partition("=")
-        name = name.strip()
-        value = rest.split("!")[0].strip()
+        if "=" in line:
+            name, _, rest = line.partition("=")
+            name = name.strip()
+            value = rest.strip()
+        else:
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            name, value = parts[0], parts[1]
         lines.append(f"{name} = {value}")
         if len(lines) >= max_lines:
             lines.append("…")
@@ -91,7 +110,8 @@ def load_simulation_conditions(sim_dir: Path) -> dict[str, Any]:
         config = loaded if isinstance(loaded, dict) else {}
 
     model_key = str(config.get("model", "unknown"))
-    model_label = _MODEL_LABELS.get(model_key, model_key)
+    model_lookup_key = model_key.strip().lower()
+    model_label = _MODEL_LABELS.get(model_lookup_key, model_key)
 
     structure_path = sim_dir / "structure_evolution.dat"
     evolution_rows = _read_structure_evolution(structure_path)
@@ -109,10 +129,13 @@ def load_simulation_conditions(sim_dir: Path) -> dict[str, Any]:
         "uv_flux": config.get("uv_flux"),
         "dtg_mass_ratio": config.get("dtg_mass_ratio"),
         "t_end_yr": config.get("t_end"),
-        "plot_abundance_definition": "Gas-phase species (names in gas_species.in)",
-        "processes_note": (
-            "Gas-phase reactions (gas_reactions.in) + grain-surface chemistry "
-            "(grain_reactions.in, surface_parameters.in)."
+        "plot_abundance_definition": (
+            "Gas-phase abundances for requested species (names in gas_species.in), "
+            "relative to total H nuclei as stored in res.pickle."
+        ),
+        "processes_note": _PROCESS_NOTES.get(
+            model_lookup_key,
+            "Chemical process scope is determined by the simulation config and network files.",
         ),
     }
 

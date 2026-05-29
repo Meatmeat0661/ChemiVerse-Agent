@@ -29,6 +29,7 @@ def main() -> None:
 
     from backend.config import get_settings
     from backend.services.nautilus import NautilusRunner
+    from backend.services.simulation_conditions import load_simulation_conditions
 
     settings = get_settings()
     nautilus = NautilusRunner(settings.nautilus)
@@ -66,6 +67,13 @@ def main() -> None:
         for png in src_dir.glob("*.png"):
             shutil.copy2(png, out_dir / png.name)
 
+    conditions = load_simulation_conditions(sim_path)
+    conditions_path = out_dir / "simulation_conditions.json"
+    conditions_path.write_text(
+        json.dumps(conditions, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
     images = []
     for png in sorted(out_dir.glob("*.png")):
         label = "combined" if png.name == "abundances.png" else png.stem
@@ -81,6 +89,7 @@ def main() -> None:
         "title": args.title or f"演化图 {plot_id}",
         "description": f"{', '.join(species)} · example_simulation",
         "species": species,
+        "conditions_file": f"data/plots/{plot_id}/simulation_conditions.json",
         "images": images,
     }
     catalog = [e for e in catalog if e.get("id") != plot_id] + [entry]

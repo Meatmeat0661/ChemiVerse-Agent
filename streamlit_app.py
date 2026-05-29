@@ -897,6 +897,25 @@ def load_simulation_catalog() -> list[dict]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _load_static_simulation_conditions(entry: dict) -> dict | None:
+    embedded = entry.get("simulation_conditions")
+    if isinstance(embedded, dict):
+        return embedded
+
+    conditions_file = entry.get("conditions_file")
+    if not conditions_file:
+        return None
+
+    import json
+
+    root = Path(__file__).resolve().parent
+    path = root / str(conditions_file)
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"error": f"{conditions_file}: {exc}"}
+
+
 def page_simulation_static() -> None:
     st.header("Westlake Evolution Plots (Precomputed)")
     st.caption(
@@ -919,6 +938,10 @@ def page_simulation_static() -> None:
     entry = catalog[choice]
     st.markdown(f"**{entry.get('title', entry['id'])}**")
     st.caption(entry.get("description", ""))
+    _render_simulation_conditions(
+        _load_static_simulation_conditions(entry),
+        species_list=entry.get("species"),
+    )
 
     images = entry.get("images") or []
     if not images:
