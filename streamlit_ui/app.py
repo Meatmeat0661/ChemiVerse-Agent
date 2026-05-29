@@ -205,6 +205,22 @@ textarea {
   filter: brightness(1.08);
 }
 
+.stButton > button[kind="secondary"] {
+  background: rgba(72, 92, 132, 0.55) !important;
+  color: #b8c8f0 !important;
+  border: 1px solid rgba(140, 165, 210, 0.45) !important;
+  box-shadow: none !important;
+}
+
+.stButton > button[kind="secondary"]:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.stButton > button:disabled {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+}
+
 .stTabs [data-baseweb="tab-list"] {
   gap: 0.55rem;
 }
@@ -435,8 +451,81 @@ def _species_list_from_text(text: str) -> list[str]:
     return [s.strip() for s in text.replace("，", ",").split(",") if s.strip()]
 
 
-def _plot_action_button(key: str) -> bool:
-    return st.button("Plot", type="primary", key=key)
+EVOLUTION_PLOT_CTX = "evolution_plot_ctx"
+
+
+def _evolution_plot_ready() -> bool:
+    ctx = st.session_state.get(EVOLUTION_PLOT_CTX)
+    if not ctx:
+        return False
+    plot_data = ctx.get("plot_data") or {}
+    if plot_data.get("returncode", 1) != 0:
+        return False
+    images = plot_data.get("images") or []
+    return bool(images or plot_data.get("image_path"))
+
+
+def _plot_action_buttons(plot_key: str, explain_key: str) -> tuple[bool, bool]:
+    ready = _evolution_plot_ready()
+    c1, c2 = st.columns(2)
+    with c1:
+        plot_clicked = st.button("Plot", type="primary", key=plot_key, use_container_width=True)
+    with c2:
+        if ready:
+            explain_clicked = st.button(
+                "AI Explanation",
+                type="primary",
+                key=explain_key,
+                use_container_width=True,
+            )
+        else:
+            explain_clicked = st.button(
+                "AI Explanation",
+                type="secondary",
+                disabled=True,
+                key=explain_key,
+                use_container_width=True,
+                help="Plot first, then click here to generate a caption.",
+            )
+    return plot_clicked, explain_clicked
+
+
+def _store_evolution_plot_ctx(
+    plot_data: dict,
+    *,
+    sim_dir_name: str | None,
+    species_list: list[str],
+    sim_dir_path: Path | None = None,
+    api_base: str | None = None,
+    api_key: str = "",
+) -> None:
+    st.session_state[EVOLUTION_PLOT_CTX] = {
+        "plot_data": plot_data,
+        "sim_dir_name": sim_dir_name,
+        "species_list": species_list,
+        "sim_dir_path": str(sim_dir_path) if sim_dir_path else None,
+        "api_base": api_base,
+        "api_key": api_key,
+    }
+
+
+def _render_stored_evolution_plot(settings, default_api_base: str | None = None, default_api_key: str = "") -> None:
+    ctx = st.session_state.get(EVOLUTION_PLOT_CTX)
+    if not ctx:
+        return
+    plot_data = ctx.get("plot_data")
+    if not plot_data:
+        return
+    sim_dir_path = Path(ctx["sim_dir_path"]) if ctx.get("sim_dir_path") else None
+    show_plot_results(
+        plot_data,
+        settings,
+        api_base=ctx.get("api_base") or default_api_base,
+        sim_dir_path=sim_dir_path,
+        sim_dir_name=ctx.get("sim_dir_name"),
+        api_key=ctx.get("api_key") or default_api_key,
+        species_list=ctx.get("species_list"),
+    )
 
 
 def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) -> None:
@@ -616,14 +705,9 @@ def _simulation_form(settings, default_species_key: str = "plot_species"):
     use_evolution = True
     plot_after = True
 
-    explain_plots = st.checkbox(
-        "AI plot explanation",
-        value=False,
-        help="Adds captions after the plot is shown (may take ~10–30s). Uncheck for fastest plotting.",
-    )
     st.info("Examples: `N2,NH3,HCN,H2CO` or `CO,CH3OH,CH3OCH3`", icon="💡")
     species_list = _species_list_from_text(species_text)
-    return sim_dir, species_list, plot_mode, use_evolution, plot_after, explain_plots
+    return sim_dir, species_list, plot_mode, use_evolution, plot_after
 
 
 def load_simulation_catalog() -> list[dict]:
@@ -743,47 +827,45 @@ def _fetch_plot_explanations(
     plot_data: dict,
     settings,
     *,
-    explain_plots: bool,
     sim_dir_path: Path | None = None,
     sim_dir_name: str | None = None,
     api_base: str | None = None,
     api_key: str = "",
     species_list: list[str] | None = None,
 ) -> dict:
-    if not explain_plots or plot_data.get("explanations"):
+    if plot_data.get("explanations"):
         return plot_data
 
     images = plot_data.get("images") or []
     image_meta = [{"label": _plot_image_label(img)} for img in images]
 
-    with st.spinner("Generating plot explanations..."):
-        try:
-            if api_base:
-                from backend.services.simulation_api import RemoteSimulationClient
+    try:
+        if api_base:
+            from backend.services.simulation_api import RemoteSimulationClient
 
-                client = RemoteSimulationClient(api_base, api_key=api_key)
-                explained = client.explain_plot(
-                    sim_dir=sim_dir_name,
-                    species=species_list,
-                    images=image_meta,
-                )
-                plot_data["explanations"] = explained.get("explanations", {})
-                plot_data["explanation_llm_used"] = explained.get("explanation_llm_used", False)
-                if explained.get("explanation_error"):
-                    plot_data["explanation_error"] = explained["explanation_error"]
-            elif sim_dir_path is not None:
-                from backend.services.plot_explanation import attach_plot_explanations
-                from backend.services.nautilus import NautilusRunner
+            client = RemoteSimulationClient(api_base, api_key=api_key)
+            explained = client.explain_plot(
+                sim_dir=sim_dir_name,
+                species=species_list,
+                images=image_meta,
+            )
+            plot_data["explanations"] = explained.get("explanations", {})
+            plot_data["explanation_llm_used"] = explained.get("explanation_llm_used", False)
+            if explained.get("explanation_error"):
+                plot_data["explanation_error"] = explained["explanation_error"]
+        elif sim_dir_path is not None:
+            from backend.services.plot_explanation import attach_plot_explanations
+            from backend.services.nautilus import NautilusRunner
 
-                nautilus_runner = NautilusRunner(settings.nautilus)
-                plot_data = attach_plot_explanations(
-                    sim_dir_path,
-                    plot_data,
-                    settings.westlake,
-                    python_exe=nautilus_runner.python_executable(),
-                )
-        except Exception as exc:
-            plot_data["explanation_error"] = str(exc)
+            nautilus_runner = NautilusRunner(settings.nautilus)
+            plot_data = attach_plot_explanations(
+                sim_dir_path,
+                plot_data,
+                settings.westlake,
+                python_exe=nautilus_runner.python_executable(),
+            )
+    except Exception as exc:
+        plot_data["explanation_error"] = str(exc)
 
     return plot_data
 
@@ -797,7 +879,6 @@ def show_plot_results(
     sim_dir_name: str | None = None,
     api_key: str = "",
     species_list: list[str] | None = None,
-    explain_plots: bool = True,
 ) -> None:
     import base64
 
@@ -849,28 +930,11 @@ def show_plot_results(
 
             explanation_slots.append((label, st.empty()))
 
-    plot_data = _fetch_plot_explanations(
-        plot_data,
-        settings,
-        explain_plots=explain_plots,
-        sim_dir_path=sim_dir_path,
-        sim_dir_name=sim_dir_name,
-        api_base=api_base,
-        api_key=api_key,
-        species_list=species_list,
-    )
-
     explanations = plot_data.get("explanations") or {}
     llm_used = bool(plot_data.get("explanation_llm_used"))
 
     if plot_data.get("explanation_error"):
-        st.warning(f"Plot statistics note: {plot_data['explanation_error']} (showing basic captions.)")
-
-    if explain_plots and not explanations:
-        st.warning(
-            "No plot explanation returned. Restart the simulation API after `git pull`, "
-            "or uncheck **AI plot explanation** for faster plotting."
-        )
+        st.warning(f"Plot explanation: {plot_data['explanation_error']}")
 
     for label, slot in explanation_slots:
         caption_text = explanations.get(label)
@@ -883,17 +947,18 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
     st.header("Westlake Evolution + Plotting (Local)")
     st.caption("Runs directly on a local westlake installation.")
 
-    sim_dir, species_list, plot_mode, use_evolution, plot_after, explain_plots = _simulation_form(settings)
+    sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
     _show_simulation_preflight(nautilus, sim_dir or None)
 
-    plot_only = _plot_action_button("local_plot")
+    plot_clicked, explain_clicked = _plot_action_buttons("local_plot", "local_explain")
 
-    if plot_only:
+    if plot_clicked:
         with st.spinner("Plotting..."):
             try:
                 sim_path = nautilus.simulation_dir(sim_dir or None)
                 if not (sim_path / "res.pickle").exists():
                     st.error(f"{sim_path / 'res.pickle'} not found. Please generate simulation results first.")
+                    st.session_state.pop(EVOLUTION_PLOT_CTX, None)
                     return
                 plot_data = nautilus.plotter.plot(
                     sim_dir=sim_path,
@@ -903,16 +968,35 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
                 )
             except Exception as exc:
                 st.error(str(exc))
+                st.session_state.pop(EVOLUTION_PLOT_CTX, None)
                 return
 
-        show_plot_results(
+        if plot_data.get("returncode", 1) != 0:
+            st.session_state.pop(EVOLUTION_PLOT_CTX, None)
+            show_plot_results(plot_data, settings, sim_dir_path=sim_path, sim_dir_name=sim_dir)
+            return
+
+        _store_evolution_plot_ctx(
             plot_data,
-            settings,
-            sim_dir_path=sim_path,
             sim_dir_name=sim_dir,
             species_list=species_list,
-            explain_plots=explain_plots,
+            sim_dir_path=sim_path,
         )
+
+    if explain_clicked and _evolution_plot_ready():
+        ctx = st.session_state[EVOLUTION_PLOT_CTX]
+        sim_path = Path(ctx["sim_dir_path"]) if ctx.get("sim_dir_path") else None
+        with st.spinner("Generating AI explanation..."):
+            ctx["plot_data"] = _fetch_plot_explanations(
+                ctx["plot_data"],
+                settings,
+                sim_dir_path=sim_path,
+                sim_dir_name=ctx.get("sim_dir_name"),
+                species_list=ctx.get("species_list"),
+            )
+        st.session_state[EVOLUTION_PLOT_CTX] = ctx
+
+    _render_stored_evolution_plot(settings)
 
 
 def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim: bool = True) -> None:
@@ -921,11 +1005,11 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
     st.header("Westlake Evolution + Plotting")
 
     client = RemoteSimulationClient(api_base, api_key=api_key)
-    sim_dir, species_list, plot_mode, use_evolution, plot_after, explain_plots = _simulation_form(settings)
+    sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
 
-    plot_only = _plot_action_button("remote_plot")
+    plot_clicked, explain_clicked = _plot_action_buttons("remote_plot", "remote_explain")
 
-    if plot_only:
+    if plot_clicked:
         with st.spinner("Plotting..."):
             try:
                 plot_data = client.plot_only(
@@ -936,17 +1020,43 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
                 )
             except Exception as exc:
                 st.error(str(exc))
+                st.session_state.pop(EVOLUTION_PLOT_CTX, None)
                 return
 
-        show_plot_results(
+        if plot_data.get("returncode", 1) != 0:
+            st.session_state.pop(EVOLUTION_PLOT_CTX, None)
+            show_plot_results(
+                plot_data,
+                settings,
+                api_base=api_base,
+                api_key=api_key,
+                sim_dir_name=sim_dir,
+                species_list=species_list,
+            )
+            return
+
+        _store_evolution_plot_ctx(
             plot_data,
-            settings,
-            api_base=api_base,
-            api_key=api_key,
             sim_dir_name=sim_dir,
             species_list=species_list,
-            explain_plots=explain_plots,
+            api_base=api_base,
+            api_key=api_key,
         )
+
+    if explain_clicked and _evolution_plot_ready():
+        ctx = st.session_state[EVOLUTION_PLOT_CTX]
+        with st.spinner("Generating AI explanation..."):
+            ctx["plot_data"] = _fetch_plot_explanations(
+                ctx["plot_data"],
+                settings,
+                sim_dir_name=ctx.get("sim_dir_name"),
+                api_base=ctx.get("api_base") or api_base,
+                api_key=ctx.get("api_key") or api_key,
+                species_list=ctx.get("species_list"),
+            )
+        st.session_state[EVOLUTION_PLOT_CTX] = ctx
+
+    _render_stored_evolution_plot(settings, default_api_base=api_base, default_api_key=api_key)
 
 
 def main() -> None:
