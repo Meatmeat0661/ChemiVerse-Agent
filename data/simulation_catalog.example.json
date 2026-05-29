@@ -4,6 +4,7 @@
     "title": "含氮分子演化（example_simulation）",
     "description": "N2, NH3, HCN, H2CO · --use_evolution",
     "species": ["N2", "NH3", "HCN", "H2CO"],
+    "conditions_file": "data/plots/nitrogen-default/simulation_conditions.json",
     "images": [
       {"label": "combined", "file": "data/plots/nitrogen-default/abundances.png"},
       {"label": "N2", "file": "data/plots/nitrogen-default/N2.png"},
