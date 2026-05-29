@@ -883,14 +883,17 @@ def _fetch_plot_explanations(
     image_meta = [{"label": _plot_image_label(img)} for img in images]
 
     try:
+        import httpx
+
         if api_base:
             from backend.services.simulation_api import RemoteSimulationClient
 
             client = RemoteSimulationClient(api_base, api_key=api_key)
             explained = client.explain_plot(
-                sim_dir=sim_dir_name,
+                sim_dir=sim_dir_name or "example_simulation",
                 species=species_list,
                 images=image_meta,
+                plot_mode="combined",
             )
             plot_data["explanations"] = explained.get("explanations", {})
             plot_data["explanation_llm_used"] = explained.get("explanation_llm_used", False)
@@ -907,6 +910,16 @@ def _fetch_plot_explanations(
                 settings.westlake,
                 python_exe=nautilus_runner.python_executable(),
             )
+    except httpx.HTTPStatusError as exc:
+        detail = ""
+        try:
+            detail = exc.response.json().get("detail", "")
+        except Exception:
+            detail = exc.response.text or str(exc)
+        plot_data["explanation_error"] = (
+            f"{detail} — update the simulation API (git pull + restart uvicorn) "
+            "or ensure example_simulation/res.pickle exists."
+        )
     except Exception as exc:
         plot_data["explanation_error"] = str(exc)
 

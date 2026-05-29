@@ -122,6 +122,41 @@ streamlit run streamlit_app.py
 
 ---
 
+## 验证「AI 图注」接口
+
+在服务器上（把 `ACTUAL_KEY` 换成 `SIMULATION_API_KEY`）：
+
+```bash
+# 路由是否存在（应看到 plot/explain）
+curl -s http://127.0.0.1:8765/openapi.json | grep -o 'plot/explain'
+
+# 调用说明接口（必须带 sim_dir，且该目录下已有 res.pickle）
+curl -s -X POST "http://127.0.0.1:8765/api/simulation/plot/explain" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ACTUAL_KEY" \
+  -d '{"sim_dir":"example_simulation","species":["CO"],"images":[{"label":"combined"}]}'
+```
+
+| 响应 `detail` | 含义 | 处理 |
+|---------------|------|------|
+| `Not Found` | 旧版 API，没有 `/plot/explain` | `git pull` 后重启 uvicorn（见下） |
+| `No res.pickle in ...` | 路由正常，但还没跑过模拟 | 先在网页点「Plot」或 `POST /api/simulation/run` 生成 `res.pickle` |
+| 含 `explanations` 的 JSON | 正常 | Streamlit 点「AI Explanation」即可 |
+
+更新代码并重启 API：
+
+```bash
+cd /opt/astrochem-agent && git pull
+source .venv/bin/activate
+export SIMULATION_API_KEY="你的密钥"
+pkill -f "uvicorn backend.main:app" || true
+nohup python -m uvicorn backend.main:app --host 0.0.0.0 --port 8765 >> api.log 2>&1 &
+```
+
+然后 **Streamlit Cloud → Redeploy**（客户端会对旧 API 自动回退到 `POST /plot?include_explanations=true`）。
+
+---
+
 ## 常见问题
 
 **Q：要不要把 westlake 放到 Streamlit Cloud？**  
