@@ -59,7 +59,8 @@ class RemoteSimulationClient:
             "include_images_base64": include_images_base64,
             "include_explanations": include_explanations,
         }
-        with httpx.Client(timeout=600) as client:
+        timeout = httpx.Timeout(30.0, read=600.0)
+        with httpx.Client(timeout=timeout) as client:
             response = client.post(
                 f"{self.base_url}/api/simulation/plot",
                 json=body,

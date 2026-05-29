@@ -138,6 +138,13 @@ def run_simulation(body: SimulationRequest):
 
 @app.post("/api/simulation/plot", dependencies=[Depends(verify_simulation_api_key)])
 def plot_simulation(body: PlotRequest):
+    from backend.services.plot_lock import release_plot_lock, try_acquire_plot_lock
+
+    if not try_acquire_plot_lock(timeout=600.0):
+        raise HTTPException(
+            status_code=503,
+            detail="Plot queue busy (another plot is running). Wait ~1 min and try again.",
+        )
     try:
         sim_dir = nautilus.simulation_dir(body.sim_dir)
         pickle_path = sim_dir / "res.pickle"
@@ -172,6 +179,8 @@ def plot_simulation(body: PlotRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except subprocess.TimeoutExpired as exc:
         raise HTTPException(status_code=504, detail="Plotting timed out") from exc
+    finally:
+        release_plot_lock()
 
 
 @app.post("/api/simulation/plot/explain", dependencies=[Depends(verify_simulation_api_key)])

@@ -44,7 +44,10 @@ def rule_based_summary(
     list_reactions: bool = True,
 ) -> str:
     if not molecule:
-        return f"未在分子库中找到与「{query}」匹配的物种（支持 key、SMILES、normal_formula、empirical_formulae）。"
+        return (
+            f'No species matching "{query}" was found in the molecule database '
+            "(supports key, SMILES, normal_formula, empirical_formulae)."
+        )
 
     obs_list = molecule.observations or []
     obs_sources = sorted({o.source for o in obs_list})

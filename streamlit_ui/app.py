@@ -250,11 +250,13 @@ textarea {
 }
 
 .stTabs [data-baseweb="tab"] {
+  position: relative;
   height: 3rem;
   padding: 0.5rem 1.2rem;
   font-size: 1.2rem;
   border: 1.4px solid rgba(156, 200, 255, 0.6);
   border-radius: 10px 10px 0 0;
+  box-sizing: border-box;
 }
 
 .stTabs [data-baseweb="tab"]:hover {
@@ -266,10 +268,21 @@ textarea {
   background: rgba(45, 74, 148, 0.55);
 }
 
-/* Streamlit default tab indicator (orange) */
+/* Full-width blue bar aligned with tab border (replaces narrow tab-highlight) */
+.stTabs [aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: -1.4px;
+  right: -1.4px;
+  bottom: -1.4px;
+  height: 4px;
+  background-color: #9ad8ff;
+  border-radius: 0 0 8px 8px;
+  pointer-events: none;
+}
+
 .stTabs [data-baseweb="tab-highlight"] {
-  background-color: #9ad8ff !important;
-  height: 4px !important;
+  display: none !important;
 }
 
 .stTabs [data-baseweb="tab-border"] {
@@ -478,6 +491,40 @@ def _species_list_from_text(text: str) -> list[str]:
 EVOLUTION_PLOT_CTX = "evolution_plot_ctx"
 
 
+def _format_simulation_api_error(exc: Exception, api_base: str | None = None) -> str:
+    msg = str(exc)
+    lower = msg.lower()
+    if "503" in msg or "plot queue busy" in lower or "plot queue" in lower:
+        return (
+            f"Server is busy ({msg}). Another plot is still running — wait about one minute "
+            "and click Plot once (do not spam the button)."
+        )
+    if "111" in msg or "connection refused" in lower:
+        host = api_base or "http://120.27.250.228:8765"
+        return (
+            f"Simulation API is not running ({msg}). "
+            f"Nothing is listening at {host}. "
+            "On the server: start the instance, then run "
+            "`cd /opt/astrochem-agent && source .venv/bin/activate && "
+            "nohup python -m uvicorn backend.main:app --host 0.0.0.0 --port 8765 >> api.log 2>&1 &` "
+            "and open port 8765 in the firewall."
+        )
+    if "104" in msg or "connection reset" in lower or "econnreset" in lower:
+        host = api_base or "simulation API"
+        return (
+            f"Simulation server closed the connection ({msg}). "
+            f"The service at {host} may be stopped, restarting, or out of memory "
+            "(common during heavy plotting). On the server: check `systemctl`/uvicorn, "
+            "`free -h`, `df -h`, then restart the API."
+        )
+    if "connect" in lower or "timed out" in lower or "timeout" in lower:
+        return (
+            f"Cannot reach simulation server{f' at {api_base}' if api_base else ''}: {msg}. "
+            "Ensure the instance is running and port 8765 is open."
+        )
+    return msg
+
+
 def _plot_api_succeeded(plot_data: dict) -> bool:
     """Plot subprocess/API succeeded (unlock AI Explanation; image may still fail to display)."""
     if plot_data.get("returncode", 1) != 0:
@@ -517,8 +564,8 @@ def _plot_action_buttons(plot_key: str, explain_key: str) -> tuple[bool, bool]:
             )
     if not ready:
         st.caption(
-            "**Plot** draws the figure first (no AI text). When the plot succeeds, "
-            "refresh once — **AI Explanation** turns blue for captions."
+            'After plotting, you can click "AI Explanation" button to generate '
+            "explanation for this plot."
         )
     return plot_clicked, explain_clicked
 
@@ -592,6 +639,30 @@ def _plot_images_ready(plot_data: dict) -> bool:
     return any(img.get("base64") for img in images)
 
 
+def _slim_plot_data_for_session(plot_data: dict) -> dict:
+    """Drop large base64 blobs from session; refetch via /api/outputs when displaying."""
+    import copy
+
+    slim = copy.deepcopy(plot_data)
+    for img in slim.get("images") or []:
+        if img.get("url"):
+            img.pop("base64", None)
+    return slim
+
+
+def _ensure_plot_images_displayable(
+    plot_data: dict,
+    api_base: str | None,
+    *,
+    api_key: str = "",
+) -> dict:
+    if _plot_images_ready(plot_data):
+        return plot_data
+    if api_base:
+        return _hydrate_remote_plot_images(plot_data, api_base, api_key=api_key)
+    return plot_data
+
+
 def _hydrate_remote_plot_images(
     plot_data: dict,
     api_base: str,
@@ -639,7 +710,7 @@ def _store_evolution_plot_ctx(
     api_key: str = "",
 ) -> None:
     st.session_state[EVOLUTION_PLOT_CTX] = {
-        "plot_data": plot_data,
+        "plot_data": _slim_plot_data_for_session(plot_data),
         "sim_dir_name": sim_dir_name,
         "species_list": species_list,
         "sim_dir_path": str(sim_dir_path) if sim_dir_path else None,
@@ -655,6 +726,9 @@ def _render_stored_evolution_plot(settings, default_api_base: str | None = None,
     plot_data = ctx.get("plot_data")
     if not plot_data:
         return
+    import copy
+
+    plot_data = copy.deepcopy(plot_data)
     sim_dir_path = Path(ctx["sim_dir_path"]) if ctx.get("sim_dir_path") else None
     show_plot_results(
         plot_data,
@@ -1058,6 +1132,13 @@ def show_plot_results(
         )
     _render_simulation_conditions(conditions, species_list=species_list or plot_data.get("plotted"))
 
+    plot_data = _ensure_plot_images_displayable(
+        plot_data, api_base, api_key=api_key
+    )
+    ctx = st.session_state.get(EVOLUTION_PLOT_CTX)
+    if ctx is not None:
+        ctx["plot_data"] = _slim_plot_data_for_session(plot_data)
+
     if plot_data.get("image_load_error"):
         st.error(f"Could not load plot image: {plot_data['image_load_error']}")
 
@@ -1156,19 +1237,27 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
             species_list=species_list,
             sim_dir_path=sim_path,
         )
-        st.rerun()
+        show_plot_results(
+            plot_data,
+            settings,
+            sim_dir_path=sim_path,
+            sim_dir_name=sim_dir,
+            species_list=species_list,
+        )
+        return
 
     if explain_clicked and _evolution_plot_ready():
         ctx = st.session_state[EVOLUTION_PLOT_CTX]
         sim_path = Path(ctx["sim_dir_path"]) if ctx.get("sim_dir_path") else None
         with st.spinner("Generating AI explanation..."):
-            ctx["plot_data"] = _fetch_plot_explanations(
-                ctx["plot_data"],
+            explained = _fetch_plot_explanations(
+                dict(ctx["plot_data"]),
                 settings,
                 sim_dir_path=sim_path,
                 sim_dir_name=ctx.get("sim_dir_name"),
                 species_list=ctx.get("species_list"),
             )
+            ctx["plot_data"] = explained
         st.session_state[EVOLUTION_PLOT_CTX] = ctx
         st.rerun()
 
@@ -1186,28 +1275,40 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
     plot_clicked, explain_clicked = _plot_action_buttons("remote_plot", "remote_explain")
 
     if plot_clicked:
+        if st.session_state.get("plot_in_progress"):
+            st.warning("A plot request is already running. Please wait — do not click Plot again.")
+            return
+        st.session_state["plot_in_progress"] = True
+        plot_data = None
         try:
-            with st.spinner("Plotting on server (first run may take 1–2 min)..."):
+            species_key = ",".join(species_list) if species_list else "default"
+            st.caption(
+                f"Species: **{species_key}**. "
+                "First plot for a new list can take **1–2 minutes** on the server; "
+                "repeating the same list is much faster (cached)."
+            )
+            with st.spinner("Plotting..."):
                 plot_data = client.plot_only(
                     sim_dir=sim_dir or None,
                     plot_mode=plot_mode,
                     species=species_list or None,
                     include_explanations=False,
-                    include_images_base64=True,
+                    include_images_base64=False,
                 )
-            if not _plot_images_ready(plot_data):
-                plot_data = _hydrate_remote_plot_images(
-                    plot_data, api_base, api_key=api_key
-                )
+            plot_data = _ensure_plot_images_displayable(
+                plot_data, api_base, api_key=api_key
+            )
         except Exception as exc:
-            st.error(str(exc))
+            st.error(_format_simulation_api_error(exc, api_base))
             st.session_state.pop(EVOLUTION_PLOT_CTX, None)
             return
+        finally:
+            st.session_state["plot_in_progress"] = False
 
-        if plot_data.get("returncode", 1) != 0:
+        if not plot_data or plot_data.get("returncode", 1) != 0:
             st.session_state.pop(EVOLUTION_PLOT_CTX, None)
             show_plot_results(
-                plot_data,
+                plot_data or {},
                 settings,
                 api_base=api_base,
                 api_key=api_key,
@@ -1218,6 +1319,8 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
 
         if plot_data.get("from_cache"):
             st.caption("Plot served from server cache (fast).")
+        elif plot_data.get("returncode") == 0:
+            st.caption("New plot generated on server (saved to cache for next time).")
 
         _store_evolution_plot_ctx(
             plot_data,
@@ -1226,19 +1329,28 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
             api_base=api_base,
             api_key=api_key,
         )
-        st.rerun()
+        show_plot_results(
+            plot_data,
+            settings,
+            api_base=api_base,
+            api_key=api_key,
+            sim_dir_name=sim_dir,
+            species_list=species_list,
+        )
+        return
 
     if explain_clicked and _evolution_plot_ready():
         ctx = st.session_state[EVOLUTION_PLOT_CTX]
         with st.spinner("Generating AI explanation..."):
-            ctx["plot_data"] = _fetch_plot_explanations(
-                ctx["plot_data"],
+            explained = _fetch_plot_explanations(
+                dict(ctx["plot_data"]),
                 settings,
                 sim_dir_name=ctx.get("sim_dir_name"),
                 api_base=ctx.get("api_base") or api_base,
                 api_key=ctx.get("api_key") or api_key,
                 species_list=ctx.get("species_list"),
             )
+            ctx["plot_data"] = _slim_plot_data_for_session(explained)
         st.session_state[EVOLUTION_PLOT_CTX] = ctx
         st.rerun()
 
