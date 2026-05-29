@@ -524,15 +524,11 @@ def page_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) -> None:
         if col.button(ex, use_container_width=True):
             st.session_state["query_input"] = ex
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        query = st.text_input(
-            "Query",
-            placeholder="e.g., N2, [C]#C, CH3OH",
-            key="query_input",
-        )
-    with col2:
-        use_llm = st.checkbox("Westlake LLM", value=False, help="Requires westlake.base_url in config.yaml")
+    query = st.text_input(
+        "Query",
+        placeholder="e.g., N2, [C]#C, CH3OH",
+        key="query_input",
+    )
 
     include_reactions = st.checkbox("Include related reactions", value=True)
 
@@ -542,7 +538,7 @@ def page_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) -> None:
                 agent.answer(
                     query.strip(),
                     include_reactions=include_reactions,
-                    use_llm=use_llm,
+                    use_llm=False,
                     westlake_settings=settings.westlake,
                 )
             )

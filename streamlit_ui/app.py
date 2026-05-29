@@ -807,15 +807,11 @@ def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) 
             st.session_state["molecule_query_input"] = ex
 
     with st.form("molecule_query_form", clear_on_submit=False):
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            query = st.text_input(
-                "Query",
-                placeholder="e.g., N2, [C]#C, CH3OH",
-                key="molecule_query_input",
-            )
-        with col2:
-            use_llm = st.checkbox("Westlake LLM", value=False, help="Requires westlake.base_url in config.yaml")
+        query = st.text_input(
+            "Query",
+            placeholder="e.g., N2, [C]#C, CH3OH",
+            key="molecule_query_input",
+        )
 
         include_reactions = st.checkbox("Include related reactions", value=True)
         submitted = st.form_submit_button("Search", type="primary", disabled=not query.strip())
@@ -828,7 +824,7 @@ def page_molecule_query(agent: AstroChemAgent, db: AstroChemDatabase, settings) 
             agent.answer(
                 query.strip(),
                 include_reactions=include_reactions,
-                use_llm=use_llm,
+                use_llm=False,
                 westlake_settings=settings.westlake,
             )
         )
