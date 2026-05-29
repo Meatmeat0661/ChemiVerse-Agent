@@ -591,8 +591,39 @@ def _plot_action_buttons(plot_key: str, explain_key: str) -> tuple[bool, bool]:
                 use_container_width=True,
             )
     if not ready:
-        st.caption("After plotting succeeds, **AI Explanation** unlocks (blue, same as Plot).")
+        st.caption(
+            "**Plot** only draws figures (no AI text). After it succeeds, "
+            "**AI Explanation** unlocks for captions."
+        )
     return plot_clicked, explain_clicked
+
+
+def _hydrate_remote_plot_images(plot_data: dict, api_base: str) -> dict:
+    """Fetch PNG bytes server-side (avoids huge base64 in /plot JSON + HTTPS mixed-content)."""
+    import base64
+
+    import httpx
+
+    images = plot_data.get("images") or []
+    if not images or not api_base:
+        return plot_data
+
+    base = api_base.rstrip("/")
+    with httpx.Client(timeout=60) as client:
+        for img in images:
+            if img.get("base64"):
+                continue
+            rel = img.get("url") or ""
+            if not rel:
+                continue
+            url = f"{base}{rel}" if rel.startswith("/") else rel
+            try:
+                response = client.get(url)
+                response.raise_for_status()
+                img["base64"] = base64.b64encode(response.content).decode("ascii")
+            except Exception:
+                pass
+    return plot_data
 
 
 def _store_evolution_plot_ctx(
@@ -715,18 +746,21 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
     plot_clicked, explain_clicked = _plot_action_buttons("remote_plot", "remote_explain")
 
     if plot_clicked:
-        with st.spinner("Plotting..."):
-            try:
+        try:
+            with st.spinner("Drawing plot on server (no AI captions)..."):
                 plot_data = client.plot_only(
                     sim_dir=sim_dir or None,
                     plot_mode=plot_mode,
                     species=species_list or None,
                     include_explanations=False,
+                    include_images_base64=False,
                 )
-            except Exception as exc:
-                st.error(str(exc))
-                st.session_state.pop(EVOLUTION_PLOT_CTX, None)
-                return
+            with st.spinner("Loading images..."):
+                plot_data = _hydrate_remote_plot_images(plot_data, api_base)
+        except Exception as exc:
+            st.error(str(exc))
+            st.session_state.pop(EVOLUTION_PLOT_CTX, None)
+            return
 
         if plot_data.get("returncode", 1) != 0:
             st.session_state.pop(EVOLUTION_PLOT_CTX, None)

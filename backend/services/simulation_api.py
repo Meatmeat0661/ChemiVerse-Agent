@@ -47,13 +47,16 @@ class RemoteSimulationClient:
         sim_dir: str | None = None,
         plot_mode: str = "combined",
         species: list[str] | None = None,
+        *,
         include_explanations: bool = False,
+        include_images_base64: bool = False,
     ) -> dict:
+        """Plot from existing res.pickle. Explanations are separate (explain_plot)."""
         body = {
             "sim_dir": sim_dir,
             "plot_mode": plot_mode,
             "species": species or [],
-            "include_images_base64": True,
+            "include_images_base64": include_images_base64,
             "include_explanations": include_explanations,
         }
         with httpx.Client(timeout=600) as client:
