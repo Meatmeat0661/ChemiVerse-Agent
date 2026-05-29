@@ -650,6 +650,9 @@ def _plot_action_buttons(plot_key: str, explain_key: str) -> tuple[bool, bool]:
     return plot_clicked, explain_clicked
 
 
+PHYSICAL_CONDITIONS_CACHE = "physical_conditions_cache"
+
+
 def _load_simulation_conditions(
     *,
     sim_dir_path: Path | None = None,
@@ -672,37 +675,36 @@ def _load_simulation_conditions(
     return None
 
 
-def _render_simulation_conditions(info: dict | None) -> None:
+def _render_physical_conditions_panel(
+    *,
+    sim_dir_path: Path | None = None,
+    sim_dir_name: str | None = None,
+    api_base: str | None = None,
+    api_key: str = "",
+) -> None:
+    """Fixed block below Plot — simulation setup does not depend on plotted species."""
+    sim_key = sim_dir_name or "example_simulation"
+    cache_key = f"{api_base or 'local'}:{sim_key}"
+    cache = st.session_state.setdefault(PHYSICAL_CONDITIONS_CACHE, {})
+    if cache_key not in cache:
+        cache[cache_key] = _load_simulation_conditions(
+            sim_dir_path=sim_dir_path,
+            sim_dir_name=sim_key,
+            api_base=api_base,
+            api_key=api_key,
+        )
+    info = cache[cache_key]
+
+    st.markdown("#### Physical conditions")
     if not info:
+        st.caption("Physical conditions unavailable.")
         return
     if info.get("error"):
         st.caption(f"Physical conditions unavailable: {info['error']}")
         return
     from backend.services.simulation_conditions import conditions_to_markdown
 
-    st.markdown("#### Physical conditions")
     st.info(conditions_to_markdown(info))
-
-
-def _attach_simulation_conditions(
-    plot_data: dict,
-    *,
-    sim_dir_path: Path | None = None,
-    sim_dir_name: str | None = None,
-    api_base: str | None = None,
-    api_key: str = "",
-) -> dict:
-    if plot_data.get("simulation_conditions"):
-        return plot_data
-    info = _load_simulation_conditions(
-        sim_dir_path=sim_dir_path,
-        sim_dir_name=sim_dir_name,
-        api_base=api_base,
-        api_key=api_key,
-    )
-    if info:
-        plot_data["simulation_conditions"] = info
-    return plot_data
 
 
 def _slim_plot_data_for_session(plot_data: dict) -> dict:
@@ -828,6 +830,8 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
 
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
     plot_clicked, explain_clicked = _plot_action_buttons("local_plot", "local_explain")
+    sim_path = nautilus.simulation_dir(sim_dir or None)
+    _render_physical_conditions_panel(sim_dir_path=sim_path, sim_dir_name=sim_dir)
 
     if plot_clicked:
         with st.spinner("Plotting..."):
@@ -894,6 +898,11 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
     client = RemoteSimulationClient(api_base, api_key=api_key)
     sim_dir, species_list, plot_mode, use_evolution, plot_after = _simulation_form(settings)
     plot_clicked, explain_clicked = _plot_action_buttons("remote_plot", "remote_explain")
+    _render_physical_conditions_panel(
+        sim_dir_name=sim_dir,
+        api_base=api_base,
+        api_key=api_key,
+    )
 
     if plot_clicked:
         if st.session_state.get("plot_in_progress"):
@@ -902,11 +911,6 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
         st.session_state["plot_in_progress"] = True
         plot_data = None
         try:
-            species_key = ",".join(species_list) if species_list else "default"
-            st.caption(
-                f"Species: **{species_key}**. First plot for a new list may take **1–2 minutes**; "
-                "the same list is faster next time (cached)."
-            )
             with st.spinner("Plotting..."):
                 plot_data = client.plot_only(
                     sim_dir=sim_dir or None,
@@ -936,11 +940,6 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
                 species_list=species_list,
             )
             return
-
-        if plot_data.get("from_cache"):
-            st.caption("Plot served from server cache (fast).")
-        elif plot_data.get("returncode") == 0:
-            st.caption("New plot generated on server (cached for next time).")
 
         _store_evolution_plot_ctx(
             plot_data,
@@ -1158,16 +1157,6 @@ def show_plot_results(
         st.code(plot_data.get("stderr") or plot_data.get("stdout") or "")
         return
 
-    conditions = plot_data.get("simulation_conditions")
-    if not conditions:
-        conditions = _load_simulation_conditions(
-            sim_dir_path=sim_dir_path,
-            sim_dir_name=sim_dir_name,
-            api_base=api_base,
-            api_key=api_key,
-        )
-    _render_simulation_conditions(conditions)
-
     plot_data = _ensure_plot_images_displayable(
         plot_data, api_base, api_key=api_key
     )
@@ -1197,7 +1186,6 @@ def show_plot_results(
     for idx, img in enumerate(images):
         with cols[idx % len(cols)]:
             label = _plot_image_label(img)
-            st.caption(label)
             if img.get("base64"):
                 st.image(base64.b64decode(img["base64"]), use_container_width=True)
             else:
