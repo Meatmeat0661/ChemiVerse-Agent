@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 from pathlib import Path
 from typing import Any
 
@@ -152,34 +153,52 @@ def _phase_processes_line(model: str) -> str:
     )
 
 
-def conditions_to_markdown(info: dict[str, Any]) -> str:
-    """Compact markdown for Streamlit Physical conditions (six fields only)."""
-    lines: list[str] = [
-        f"**Density n(H):** {info.get('n_H_cm3', '—')}",
-        f"**Temperature:** {info.get('T_K', '—')}",
+def conditions_to_rows(info: dict[str, Any]) -> list[tuple[str, str]]:
+    """Label/value pairs for Physical conditions (six fields)."""
+    rows: list[tuple[str, str]] = [
+        ("Density n(H)", str(info.get("n_H_cm3", "—"))),
+        ("Temperature", str(info.get("T_K", "—"))),
     ]
     zeta = info.get("zeta_cr_s-1")
     if zeta is not None:
-        lines.append(f"**Cosmic-ray ionization rate zeta_CR:** {_fmt_sci(float(zeta))} s^-1")
+        rows.append(("Cosmic-ray ionization rate zeta_CR", f"{_fmt_sci(float(zeta))} s^-1"))
     else:
-        lines.append("**Cosmic-ray ionization rate ζ_CR:** —")
+        rows.append(("Cosmic-ray ionization rate zeta_CR", "—"))
 
     preview = info.get("initial_abundances_preview") or []
     if preview:
         ab = "; ".join(p for p in preview if p != "…")
         if any(p == "…" for p in preview):
             ab = f"{ab}; …" if ab else "…"
-        lines.append(f"**Initial abundances (relative to H):** {ab}")
+        rows.append(("Initial abundances (relative to H)", ab))
     else:
-        lines.append("**Initial abundances:** —")
+        rows.append(("Initial abundances (relative to H)", "—"))
 
     time_span = info.get("time_span_yr")
     if time_span:
-        lines.append(f"**Time range:** {time_span}")
+        rows.append(("Time range", str(time_span)))
     elif info.get("integration_t_end_yr") is not None:
-        lines.append(f"**Time range:** 0 → {_fmt_sci(float(info['integration_t_end_yr']))} yr")
+        rows.append(("Time range", f"0 → {_fmt_sci(float(info['integration_t_end_yr']))} yr"))
     else:
-        lines.append("**Time range:** —")
+        rows.append(("Time range", "—"))
 
-    lines.append(f"**Phases / processes:** {_phase_processes_line(str(info.get('model', '')))}")
-    return "\n\n".join(lines)
+    rows.append(("Phases / processes", _phase_processes_line(str(info.get("model", "")))))
+    return rows
+
+
+def conditions_to_html(info: dict[str, Any]) -> str:
+    """Bulleted HTML list with distinct label vs value styling for Streamlit."""
+    items = []
+    for label, value in conditions_to_rows(info):
+        items.append(
+            "<li>"
+            f'<span class="pc-label">{html.escape(label)}</span>'
+            f'<span class="pc-value">{html.escape(value)}</span>'
+            "</li>"
+        )
+    return f'<ul class="physical-conditions-list">{"".join(items)}</ul>'
+
+
+def conditions_to_markdown(info: dict[str, Any]) -> str:
+    """Plain markdown fallback (prefer conditions_to_html in Streamlit)."""
+    return "\n\n".join(f"**{label}:** {value}" for label, value in conditions_to_rows(info))

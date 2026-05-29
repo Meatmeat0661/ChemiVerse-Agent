@@ -133,6 +133,63 @@ h1, h2, h3, h4, h5, h6, p, label, span, li, div {
   color: #eef4ff !important;
 }
 
+.physical-conditions-card {
+  background: rgba(18, 36, 78, 0.55);
+  border: 1.5px solid rgba(154, 216, 255, 0.45);
+  border-radius: 10px;
+  padding: 0.85rem 1.1rem 0.95rem 1rem;
+  margin: 0.35rem 0 1rem 0;
+}
+
+.physical-conditions-list {
+  list-style-type: disc;
+  margin: 0;
+  padding: 0 0 0 1.35rem;
+  color: #d8e4ff;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+.physical-conditions-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 1rem;
+  margin-bottom: 0.65rem;
+  padding-left: 0.15rem;
+}
+
+.physical-conditions-list li:last-child {
+  margin-bottom: 0;
+}
+
+.physical-conditions-list .pc-label {
+  flex: 0 0 13.5rem;
+  max-width: 100%;
+  color: rgba(168, 198, 240, 0.82);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.physical-conditions-list .pc-label::after {
+  content: ":";
+  margin-left: 0.12rem;
+  color: rgba(154, 216, 255, 0.55);
+  font-weight: 400;
+  text-transform: none;
+}
+
+.physical-conditions-list .pc-value {
+  flex: 1 1 12rem;
+  min-width: 0;
+  color: #f0f7ff;
+  font-size: 0.96rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
 [data-testid="stMetric"] {
   background: var(--card);
   border: 1px solid var(--card-border);
@@ -622,9 +679,12 @@ def _render_physical_conditions_panel(
     if info.get("error"):
         st.caption(f"Physical conditions unavailable: {info['error']}")
         return
-    from backend.services.simulation_conditions import conditions_to_markdown
+    from backend.services.simulation_conditions import conditions_to_html
 
-    st.info(conditions_to_markdown(info))
+    st.markdown(
+        f'<div class="physical-conditions-card">{conditions_to_html(info)}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _plot_images_ready(plot_data: dict) -> bool:
@@ -902,11 +962,13 @@ def simulation_admin_mode_enabled(on_cloud: bool) -> bool:
 
 
 def _simulation_form(settings, default_species_key: str = "plot_species"):
-    default_species = st.session_state.get(default_species_key, settings.nautilus.default_species)
+    if default_species_key not in st.session_state:
+        st.session_state[default_species_key] = ""
     sim_dir = settings.nautilus.default_sim_dir
     species_text = st.text_input(
         "Species to plot (comma-separated)",
-        value=default_species if isinstance(default_species, str) else ",".join([default_species]),
+        key=default_species_key,
+        placeholder="e.g. N2,NH3,HCN,H2CO",
     )
     # 固定仅输出一张合并图，简化访客操作
     plot_mode = "combined"
@@ -1191,6 +1253,9 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
     _render_physical_conditions_panel(sim_dir_path=sim_path, sim_dir_name=sim_dir)
 
     if plot_clicked:
+        if not species_list:
+            st.warning("Enter at least one species to plot (comma-separated).")
+            return
         with st.spinner("Plotting..."):
             try:
                 sim_path = nautilus.simulation_dir(sim_dir or None)
@@ -1263,6 +1328,9 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
     )
 
     if plot_clicked:
+        if not species_list:
+            st.warning("Enter at least one species to plot (comma-separated).")
+            return
         if st.session_state.get("plot_in_progress"):
             st.warning("A plot request is already running. Please wait — do not click Plot again.")
             return
