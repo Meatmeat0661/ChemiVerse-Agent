@@ -1084,6 +1084,11 @@ def _plot_image_label(img: dict) -> str:
 def _render_plot_explanation(text: str) -> None:
     import html
 
+    from backend.services.plot_explanation import _sanitize_explanation
+
+    text = _sanitize_explanation(text)
+    if not text:
+        return
     body = html.escape(text).replace("\n", "<br/>")
     st.markdown(
         f'<div class="plot-explanation-card"><strong>About this plot</strong><br/><br/>{body}</div>',
@@ -1100,9 +1105,16 @@ def _fetch_plot_explanations(
     api_base: str | None = None,
     api_key: str = "",
     species_list: list[str] | None = None,
+    force_refresh: bool = False,
 ) -> dict:
-    if plot_data.get("explanations"):
-        return plot_data
+    from backend.services.plot_explanation import sanitize_plot_explanations
+
+    if plot_data.get("explanations") and not force_refresh:
+        return sanitize_plot_explanations(plot_data)
+
+    plot_data = dict(plot_data)
+    plot_data.pop("explanations", None)
+    plot_data.pop("explanation_llm_used", None)
 
     images = plot_data.get("images") or []
     image_meta = [{"label": _plot_image_label(img)} for img in images]
@@ -1148,7 +1160,7 @@ def _fetch_plot_explanations(
     except Exception as exc:
         plot_data["explanation_error"] = str(exc)
 
-    return plot_data
+    return sanitize_plot_explanations(plot_data)
 
 
 def show_plot_results(
@@ -1304,6 +1316,7 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
                 sim_dir_path=sim_path,
                 sim_dir_name=ctx.get("sim_dir_name"),
                 species_list=ctx.get("species_list"),
+                force_refresh=True,
             )
             ctx["plot_data"] = explained
         st.session_state[EVOLUTION_PLOT_CTX] = ctx
@@ -1394,6 +1407,7 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
                 api_base=ctx.get("api_base") or api_base,
                 api_key=ctx.get("api_key") or api_key,
                 species_list=ctx.get("species_list"),
+                force_refresh=True,
             )
             ctx["plot_data"] = _slim_plot_data_for_session(explained)
         st.session_state[EVOLUTION_PLOT_CTX] = ctx

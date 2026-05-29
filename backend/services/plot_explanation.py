@@ -40,7 +40,11 @@ _BANNED_EXPLANATION_PHRASES: tuple[str, ...] = (
     "compare with observations only qualitatively",
     "compare with observations",
     "the curve reflects how gas-phase chemistry and network coupling",
+    "the curve reflects how gas-phase chemistry",
+    "gas-phase chemistry and network coupling in this model",
+    "gas-phase chemistry and network coupling",
     "redistribute abundances over astrophysical time",
+    "redistribute abundances",
     "interpret these curves as model-predicted",
     "log time versus log abundance",
     "log time vs log abundance",
@@ -49,12 +53,42 @@ _BANNED_EXPLANATION_PHRASES: tuple[str, ...] = (
     "the figure shows",
 )
 
+# Clauses containing any of these are dropped entirely (LLM boilerplate).
+_BANNED_CLAUSE_MARKERS: tuple[str, ...] = (
+    "curve reflects",
+    "compare with observations",
+    "redistribute abundances",
+    "network coupling in this model",
+    "only qualitatively",
+)
+
 
 def _sanitize_explanation(text: str) -> str:
-    """Remove known boilerplate; drop contaminated sentences."""
+    """Remove known boilerplate; drop contaminated sentences/clauses."""
     import re
 
     cleaned = text.strip()
+    if not cleaned:
+        return ""
+
+    # Exact recurring closing (often after a semicolon).
+    cleaned = re.sub(
+        r"The curve reflects how gas-phase chemistry and network coupling in this model\s+"
+        r"redistribute abundances over astrophysical time\s*;\s*"
+        r"compare with observations only qualitatively\.?",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"The curve reflects how gas-phase chemistry and network coupling[^.!?;]*"
+        r"redistribute abundances over astrophysical time[^.!?;]*"
+        r"compare with observations[^.!?;]*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
     for phrase in _BANNED_EXPLANATION_PHRASES:
         idx = cleaned.lower().find(phrase.lower())
         while idx >= 0:
@@ -64,23 +98,39 @@ def _sanitize_explanation(text: str) -> str:
             cleaned = (cleaned[:idx] + cleaned[end:]).strip()
             idx = cleaned.lower().find(phrase.lower())
 
-    sentences: list[str] = []
-    for part in re.split(r"(?<=[.!?])\s+", cleaned):
+    kept: list[str] = []
+    for part in re.split(r"(?<=[.!?;])\s+", cleaned):
         part = part.strip()
+        if part.endswith(";"):
+            part = part[:-1].strip()
         if not part:
             continue
         low = part.lower()
         if any(phrase in low for phrase in _BANNED_EXPLANATION_PHRASES):
             continue
-        if len(part) < 20 and any(
+        if any(marker in low for marker in _BANNED_CLAUSE_MARKERS):
+            continue
+        if len(part) < 24 and any(
             frag in low for frag in ("in this model", "the curve", "this plot", "this figure")
         ):
             continue
-        sentences.append(part)
+        kept.append(part)
 
-    cleaned = " ".join(sentences)
-    cleaned = re.sub(r"\s+", " ", cleaned).replace("..", ".").strip()
+    cleaned = " ".join(kept)
+    cleaned = re.sub(r"\s+", " ", cleaned).replace("..", ".").replace(" ;", ";").strip()
     return cleaned
+
+
+def sanitize_plot_explanations(plot_data: dict[str, Any]) -> dict[str, Any]:
+    """Apply boilerplate removal to all explanation strings in plot_data."""
+    explanations = plot_data.get("explanations")
+    if not isinstance(explanations, dict):
+        return plot_data
+    plot_data = dict(plot_data)
+    plot_data["explanations"] = {
+        str(k): _sanitize_explanation(str(v)) for k, v in explanations.items() if v
+    }
+    return plot_data
 
 
 # Conservative network-role hints (educational; not observational claims).
