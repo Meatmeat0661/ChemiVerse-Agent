@@ -565,14 +565,19 @@ def _plot_images_ready(plot_data: dict) -> bool:
     return any(img.get("base64") for img in images)
 
 
+def _plot_api_succeeded(plot_data: dict) -> bool:
+    if plot_data.get("returncode", 1) != 0:
+        return False
+    if plot_data.get("images"):
+        return True
+    return bool(plot_data.get("image_path"))
+
+
 def _evolution_plot_ready() -> bool:
     ctx = st.session_state.get(EVOLUTION_PLOT_CTX)
     if not ctx:
         return False
-    plot_data = ctx.get("plot_data") or {}
-    if plot_data.get("returncode", 1) != 0:
-        return False
-    return _plot_images_ready(plot_data)
+    return _plot_api_succeeded(ctx.get("plot_data") or {})
 
 
 def _plot_action_buttons(plot_key: str, explain_key: str) -> tuple[bool, bool]:
@@ -598,8 +603,8 @@ def _plot_action_buttons(plot_key: str, explain_key: str) -> tuple[bool, bool]:
             )
     if not ready:
         st.caption(
-            "**Plot** only draws figures (no AI text). After it succeeds, "
-            "**AI Explanation** unlocks for captions."
+            "**Plot** draws the figure first (no AI text). When the plot succeeds, "
+            "refresh once — **AI Explanation** turns blue for captions."
         )
     return plot_clicked, explain_clicked
 
@@ -794,14 +799,7 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
             species_list=species_list,
             sim_dir_path=sim_path,
         )
-        show_plot_results(
-            plot_data,
-            settings,
-            sim_dir_path=sim_path,
-            sim_dir_name=sim_dir,
-            species_list=species_list,
-        )
-        return
+        st.rerun()
 
     if explain_clicked and _evolution_plot_ready():
         ctx = st.session_state[EVOLUTION_PLOT_CTX]
@@ -815,6 +813,7 @@ def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> Non
                 species_list=ctx.get("species_list"),
             )
         st.session_state[EVOLUTION_PLOT_CTX] = ctx
+        st.rerun()
 
     _render_stored_evolution_plot(settings)
 
@@ -869,15 +868,7 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
             api_base=api_base,
             api_key=api_key,
         )
-        show_plot_results(
-            plot_data,
-            settings,
-            api_base=api_base,
-            api_key=api_key,
-            sim_dir_name=sim_dir,
-            species_list=species_list,
-        )
-        return
+        st.rerun()
 
     if explain_clicked and _evolution_plot_ready():
         ctx = st.session_state[EVOLUTION_PLOT_CTX]
@@ -891,6 +882,7 @@ def page_simulation_remote(api_base: str, api_key: str, settings, allow_run_sim:
                 species_list=ctx.get("species_list"),
             )
         st.session_state[EVOLUTION_PLOT_CTX] = ctx
+        st.rerun()
 
     _render_stored_evolution_plot(settings, default_api_base=api_base, default_api_key=api_key)
 
