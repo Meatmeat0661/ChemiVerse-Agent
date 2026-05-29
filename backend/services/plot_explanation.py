@@ -14,21 +14,39 @@ from backend.services.plot_stats import (
     species_for_image_label,
 )
 
-PLOT_LLM_TIMEOUT_SECONDS = 20
+PLOT_LLM_TIMEOUT_SECONDS = 28
 
-PLOT_EXPLANATION_SYSTEM = """You write astrochemical interpretations of Westlake/Nautilus gas-phase abundance evolution plots.
+PLOT_EXPLANATION_SYSTEM = """You are an astrochemical modeler interpreting Westlake/Nautilus abundance-evolution results.
 
-Your job is NOT merely to describe the figure. Provide:
-1. A brief description of axes and main trends (log time vs log abundance).
-2. Scientific analysis: what the evolution implies about formation, destruction, and coupling in the chemical network under the stated physical conditions.
-3. Meaning for the user: why the relative behaviour of species matters (e.g. early vs late chemistry, major reservoirs, linked pathways) in this simulation scenario.
-4. For combined plots, compare species quantitatively using the JSON stats; for single-species plots, focus on that species.
+Write a short analytic paragraph (4–7 sentences, English, no bullets). Prioritize scientific interpretation over figure description.
 
-Rules:
-- Use only numbers and conditions from the JSON; do not invent abundances, rates, or observational detections.
-- Mention n(H), T, Av, zeta_CR, and model type when provided in simulation_conditions.
-- Do not claim agreement with a specific source or object unless given in the data.
-- Write 4–7 sentences in clear English as a short analytic paragraph (no bullet lists)."""
+Required content:
+- Network- and phase-appropriate chemistry: formation vs destruction, reservoirs, coupled pathways, early vs late-time behaviour.
+- Quantitative support from simulation_stats (abundances, dex changes, trends, time_at_peak_yr when present).
+- Physical context from simulation_conditions (density, temperature, zeta_CR, model phases).
+
+Forbidden:
+- Generic disclaimers ("this is model output", "not an observation", "interpret these curves").
+- Opening with axis labels only ("log time vs log abundance").
+- Reusing the same closing sentence you used for another figure.
+- Inventing species, rates, or observational comparisons not in the JSON.
+
+End with ONE concluding sentence specific to THIS figure (dominant reservoir, timing of rise/fall, or contrast between species on combined plots)."""
+
+
+# Conservative network-role hints (educational; not observational claims).
+_SPECIES_ROLE: dict[str, str] = {
+    "CO": "the main gas-phase CO reservoir that anchors much of the carbon budget",
+    "H2": "the H2 pool that sets the hydrogen budget for hydrogenation sequences",
+    "CH3OH": "a complex organic tracer often tied to grain-surface hydrogenation and desorption",
+    "CH3OCH3": "a larger COM whose gas-phase rise can follow methanol-related surface chemistry",
+    "NH3": "a major nitrogen reservoir linked to hydrogenation of N-bearing species",
+    "HCN": "a nitrile tracer sensitive to high-T gas-phase and surface-return pathways",
+    "H2CO": "a simple organic intermediate between CO hydrogenation and richer COMs",
+    "N2": "a stable nitrogen reservoir that constrains how much N is available for NH3/HCN routes",
+    "C": "an atomic carbon reservoir coupled to CO and organic interconversion",
+    "CH4": "a saturated hydrocarbon tracer of methane-forming channels",
+}
 
 
 def _normalize_plotted(plot_data: dict[str, Any]) -> list[str]:
@@ -41,36 +59,202 @@ def _normalize_plotted(plot_data: dict[str, Any]) -> list[str]:
 def _conditions_context(conditions: dict[str, Any] | None) -> str:
     if not conditions:
         return ""
+    from backend.services.simulation_conditions import _phase_processes_line
+
     model = conditions.get("model_label") or conditions.get("model", "")
-    medium = conditions.get("medium_mode", "")
     n_h = conditions.get("n_H_cm3", "")
     temp = conditions.get("T_K", "")
-    av = conditions.get("Av_mag", "")
     zeta = conditions.get("zeta_cr_s-1")
-    zeta_txt = f", cosmic-ray ionization rate zeta_CR ≈ {zeta:g} s^-1" if zeta is not None else ""
-    return (
-        f"Under the {model} setup ({medium}), with n(H) {n_h}, T {temp}, A_V {av}{zeta_txt}, "
-        f"gas-phase abundances evolve as follows. "
+    phases = _phase_processes_line(str(conditions.get("model", "")))
+    zeta_txt = f", zeta_CR ~ {zeta:g} s^-1" if zeta is not None else ""
+    return f"In this {model} network ({phases}; n(H) {n_h}, T {temp}{zeta_txt}), "
+
+
+def _conditions_for_llm(conditions: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not conditions:
+        return None
+    keys = (
+        "model",
+        "model_label",
+        "n_H_cm3",
+        "T_K",
+        "zeta_cr_s-1",
+        "time_span_yr",
+        "initial_abundances_preview",
     )
+    slim = {k: conditions[k] for k in keys if conditions.get(k) is not None}
+    return slim or None
 
 
-def _trend_interpretation(name: str, trend: str, delta: float | None) -> str:
-    if trend == "increasing" and delta is not None and delta >= 2:
+def _species_role(name: str) -> str:
+    return _SPECIES_ROLE.get(name, f"{name} as a coupled tracer in this network")
+
+
+def _dex_phrase(delta: float | None) -> str:
+    if delta is None:
+        return "a modest change"
+    mag = abs(delta)
+    if mag >= 3:
+        return f"a strong {mag:.1f}-dex change"
+    if mag >= 1:
+        return f"a clear {mag:.1f}-dex change"
+    return f"a weak {mag:.1f}-dex change"
+
+
+def _rank_by_final(sp_stats: dict[str, dict[str, Any]]) -> list[tuple[str, float]]:
+    ranked = [(n, float(e["final_abundance"])) for n, e in sp_stats.items()]
+    ranked.sort(key=lambda x: x[1], reverse=True)
+    return ranked
+
+
+def _takeaway_combined(species: list[str], sp_stats: dict[str, dict[str, Any]]) -> str:
+    if not sp_stats:
+        return "Together, these tracers map how material is redistributed across the network over the integration."
+
+    ranked = _rank_by_final(sp_stats)
+    dominant, y_dom = ranked[0]
+    runner = ranked[1][0] if len(ranked) > 1 else None
+
+    rising = [
+        (n, e["abundance_change_orders"])
+        for n, e in sp_stats.items()
+        if e.get("trend") == "increasing" and e.get("abundance_change_orders") is not None
+    ]
+    rising.sort(key=lambda x: abs(x[1] or 0), reverse=True)
+    fastest = rising[0][0] if rising else None
+
+    if runner and y_dom > 0 and ranked[1][1] > 0:
+        ratio = y_dom / ranked[1][1]
+        if ratio >= 10:
+            close = (
+                f"{dominant} ends as the dominant gas-phase reservoir among the plotted species "
+                f"(final abundance ~{y_dom:.1e}), with {runner} trailing by >1 dex."
+            )
+        else:
+            close = (
+                f"Late-time chemistry leaves {dominant} and {runner} as comparable reservoirs "
+                f"(final abundances within ~1 dex), so neither tracer alone summarizes the run."
+            )
+    else:
+        close = (
+            f"By the final time step, {dominant} — {_species_role(dominant)} — "
+            f"has the highest abundance among the species shown."
+        )
+
+    if fastest and fastest != dominant:
+        close += (
+            f" The steepest build-up is {fastest}, indicating the most active net production "
+            f"or desorption among the plotted set."
+        )
+    elif fastest == dominant and rising:
+        close += f" {dominant} also shows the largest net rise, marking it as the main evolving reservoir in this selection."
+
+    unused = [s for s in species if s not in sp_stats]
+    if unused:
+        close += f" (Not in pickle: {', '.join(unused)}.)"
+    return close
+
+
+def _takeaway_single(name: str, entry: dict[str, Any]) -> str:
+    trend = entry.get("trend", "changing")
+    delta = entry.get("abundance_change_orders")
+    y0 = float(entry["initial_abundance"])
+    y1 = float(entry["final_abundance"])
+    t_peak = entry.get("time_at_peak_yr")
+    role = _species_role(name)
+
+    if trend == "increasing":
+        timing = ""
+        if t_peak is not None:
+            timing = f", peaking near t ~ {float(t_peak):g} yr before the run ends"
         return (
-            f"{name} is a net product over most of the run (rise ≈ {abs(delta):.1f} dex), "
-            "suggesting efficient gas-phase and/or surface-linked formation pathways in this network."
+            f"Overall, {name} acts as {role}: net growth ({_dex_phrase(delta)}; "
+            f"{y0:.1e} to {y1:.1e}) marks it as an accumulating product or released reservoir{timing}."
         )
     if trend == "decreasing":
         return (
-            f"{name} is depleted over time, indicating it acts mainly as a reactant, photodissociation "
-            "target, or sink in the coupled network at these conditions."
+            f"Overall, {name} ({role}) is net destroyed or locked out of the gas "
+            f"({_dex_phrase(delta)}; {y0:.1e} to {y1:.1e}), feeding downstream species rather than staying a late-time reservoir."
         )
-    if trend == "roughly flat":
-        return (
-            f"{name} stays near chemical equilibrium (weak net trend), so production and loss "
-            "are roughly balanced after the early transient."
+    return (
+        f"Overall, {name} ({role}) stays near balance ({y0:.1e} to {y1:.1e}), "
+        f"so late-time production and loss nearly cancel after the early transient."
+    )
+
+
+def _combined_analysis(
+    sp_stats: dict[str, dict[str, Any]],
+    *,
+    t0: float,
+    t1: float,
+) -> str:
+    parts = [
+        f"gas-phase abundances from t ~ {t0:g} to {t1:g} yr are compared. "
+    ]
+    for name, entry in sp_stats.items():
+        y0, y1 = entry["initial_abundance"], entry["final_abundance"]
+        trend = entry.get("trend", "changing")
+        delta = entry.get("abundance_change_orders")
+        parts.append(
+            f"{name} ({_species_role(name)}) is {trend} ({_dex_phrase(delta)}; "
+            f"{y0:.1e} -> {y1:.1e}); "
         )
-    return f"{name} shows a non-trivial evolution, reflecting competition between formation and destruction channels."
+
+    rising = [n for n, e in sp_stats.items() if e.get("trend") == "increasing"]
+    falling = [n for n, e in sp_stats.items() if e.get("trend") == "decreasing"]
+    flat = [n for n, e in sp_stats.items() if e.get("trend") == "roughly flat"]
+
+    if rising and falling:
+        parts.append(
+            f"The anti-correlated evolution of {', '.join(rising)} versus {', '.join(falling)} "
+            f"is consistent with transfer of C/N/O-bearing material through linked gas-phase and "
+            f"surface-return routes rather than a single uniform scaling. "
+        )
+    elif len(rising) >= 2:
+        parts.append(
+            f"Co-rising {', '.join(rising)} suggests shared hydrogenation or desorption pathways "
+            f"feeding multiple COM tracers in this phase model. "
+        )
+    if flat:
+        parts.append(
+            f"{', '.join(flat)} remain near steady state, implying matched formation and destruction "
+            f"after the initial adjustment. "
+        )
+    return "".join(parts)
+
+
+def _single_analysis(name: str, entry: dict[str, Any], *, t0: float, t1: float) -> str:
+    y0, y1 = entry["initial_abundance"], entry["final_abundance"]
+    trend = entry.get("trend", "changing")
+    delta = entry.get("abundance_change_orders")
+    t_peak = entry.get("time_at_peak_yr")
+    role = _species_role(name)
+
+    body = (
+        f"{name} ({role}) evolves from {y0:.1e} to {y1:.1e} between t ~ {t0:g} and {t1:g} yr "
+        f"with a {trend} trend ({_dex_phrase(delta)}). "
+    )
+    if trend == "increasing" and t_peak is not None and float(t_peak) < float(t1) * 0.9:
+        body += (
+            f"The abundance peaks near t ~ {float(t_peak):g} yr, so much of the net gain occurs "
+            f"before the final epoch—late times may reflect re-processing or approach to a slower regime. "
+        )
+    elif trend == "decreasing":
+        body += (
+            "The decline implies efficient consumption as a precursor, photodissociation target, "
+            "or freeze-out sink in the coupled gas–grain network. "
+        )
+    elif trend == "roughly flat":
+        body += (
+            "The weak net trend suggests the species sits near a quasi-steady reservoir after "
+            "the early-time adjustment. "
+        )
+    else:
+        body += (
+            "The non-monotonic shape points to competing formation and destruction channels "
+            "active at different evolutionary stages. "
+        )
+    return body
 
 
 def _rule_based_explanation(
@@ -80,59 +264,25 @@ def _rule_based_explanation(
     *,
     conditions: dict[str, Any] | None = None,
 ) -> str:
+    sp_stats = {
+        n: stats["species"][n]
+        for n in species
+        if n in stats.get("species", {})
+    }
     t0, t1 = stats.get("time_min"), stats.get("time_max")
-    parts: list[str] = [_conditions_context(conditions)]
+    ctx = _conditions_context(conditions)
 
     if label == "combined":
-        parts.append(
-            f"This combined log–log plot tracks gas-phase abundances from t ≈ {t0:g} to {t1:g} yr "
-            f"for {', '.join(species)}. "
-        )
+        body = _combined_analysis(sp_stats, t0=float(t0), t1=float(t1))
+        close = _takeaway_combined(species, sp_stats)
     else:
-        parts.append(
-            f"This plot follows {label} (log abundance vs log time) from t ≈ {t0:g} to {t1:g} yr. "
-        )
-
-    trends: list[tuple[str, str, float | None]] = []
-    for name in species:
-        entry = stats.get("species", {}).get(name)
+        entry = sp_stats.get(label)
         if not entry:
-            continue
-        y0, y1 = entry["initial_abundance"], entry["final_abundance"]
-        trend = entry.get("trend", "changing")
-        delta = entry.get("abundance_change_orders")
-        trends.append((name, trend, delta))
-        if delta is not None:
-            parts.append(
-                f"{name} {trend} by about {abs(delta):.1f} orders of magnitude "
-                f"({y0:.2e} → {y1:.2e}); "
-            )
-        else:
-            parts.append(f"{name} is {trend} ({y0:.2e} → {y1:.2e}); ")
+            return _minimal_explanation(label, species, conditions=conditions)
+        body = _single_analysis(label, entry, t0=float(t0), t1=float(t1))
+        close = _takeaway_single(label, entry)
 
-    if len(trends) >= 2:
-        rising = [n for n, tr, d in trends if tr == "increasing"]
-        falling = [n for n, tr, _ in trends if tr == "decreasing"]
-        if rising and falling:
-            parts.append(
-                f"Comparing species, {', '.join(rising)} build up while {', '.join(falling)} decline, "
-                "which points to redistribution of C-, O-, and N-bearing material through the network "
-                "rather than uniform scaling of all tracers. "
-            )
-        elif len(rising) >= 2:
-            parts.append(
-                f"Several species ({', '.join(rising)}) rise together, consistent with linked "
-                "synthetic routes (e.g. progressive hydrogenation or surface return) in this model. "
-            )
-
-    for name, trend, delta in trends:
-        parts.append(_trend_interpretation(name, trend, delta) + " ")
-
-    parts.append(
-        "Interpret these curves as model-predicted chemical evolution for the stated physical scenario; "
-        "they illustrate which species become major reservoirs and when, not a direct match to a specific observation."
-    )
-    return "".join(parts).replace("  ", " ").strip()
+    return f"{ctx}{body}{close}".replace("  ", " ").strip()
 
 
 def _minimal_explanation(
@@ -146,16 +296,15 @@ def _minimal_explanation(
         names = ", ".join(species) if species else "selected species"
         return (
             ctx
-            + f"This figure shows log–log gas-phase abundance versus time for {names}. "
-            "Rising segments indicate net formation or release into the gas; falling segments indicate "
-            "chemical consumption or freeze-out in the coupled network. "
-            "Together, the curves show which species dominate at early vs late evolutionary stages in this model."
+            + f"Relative evolution of {names} traces how the network reallocates C/N/O reservoirs "
+            f"across gas-phase and surface-linked channels; compare which species rise or fall together "
+            f"to infer coupled synthetic routes."
         )
     return (
         ctx
-        + f"This figure tracks {label} abundance versus time (log scales). "
-        "The slope reflects the balance of formation and destruction; a sustained rise marks a growing reservoir, "
-        "while a decline marks a species mainly converted into other network products under these conditions."
+        + f"The {label} trace reflects the balance of formation, destruction, and (in multi-phase models) "
+        f"surface exchange for {_species_role(label)}; slope changes mark shifts between net source "
+        f"and sink behaviour over the integration."
     )
 
 
@@ -166,22 +315,38 @@ async def _generate_image_explanation(
     stats: dict[str, Any],
     species: list[str],
     conditions: dict[str, Any] | None = None,
+    other_explanations: dict[str, str] | None = None,
 ) -> str | None:
     if not settings.base_url:
         return None
 
+    plot_kind = "combined_multi_species" if image_label == "combined" else "single_species"
     payload = {
         "image_label": image_label,
+        "plot_kind": plot_kind,
         "species_in_plot": species,
         "simulation_stats": stats,
-        "simulation_conditions": conditions,
+        "simulation_conditions": _conditions_for_llm(conditions),
     }
     user_message = (
-        f"Interpret the astrochemical meaning of the evolution plot labeled '{image_label}'. "
-        "Do not only describe the lines: explain what the trends imply for chemistry in this "
-        "simulation (formation vs destruction, relative species roles, timing), using the JSON below.\n\n"
+        f"Write the astrochemical interpretation for figure '{image_label}' only "
+        f"({plot_kind}; species: {', '.join(species) or 'see stats'}).\n"
+        "Lead with science, not axis description. Use numbers from simulation_stats.\n"
+        "The final sentence must be unique to this figure.\n\n"
         f"Context JSON:\n{json.dumps(payload, ensure_ascii=False, indent=2)}"
     )
+    if other_explanations:
+        snippets = []
+        for other_label, text in other_explanations.items():
+            if other_label == image_label:
+                continue
+            snippet = " ".join(text.split())[:280]
+            snippets.append(f"- [{other_label}]: {snippet}…")
+        if snippets:
+            user_message += (
+                "\n\nAlready written for other figures — do NOT reuse their wording or closing lines:\n"
+                + "\n".join(snippets)
+            )
 
     url = settings.base_url.rstrip("/") + "/chat/completions"
     headers = {"Authorization": f"Bearer {settings.api_key}"}
@@ -191,7 +356,7 @@ async def _generate_image_explanation(
             {"role": "system", "content": PLOT_EXPLANATION_SYSTEM},
             {"role": "user", "content": user_message},
         ],
-        "temperature": 0.35,
+        "temperature": 0.45,
     }
 
     timeout = httpx.Timeout(5.0, read=float(PLOT_LLM_TIMEOUT_SECONDS))
@@ -260,6 +425,7 @@ async def build_plot_explanations_async(
                     stats=stats,
                     species=sp,
                     conditions=conditions,
+                    other_explanations=explanations,
                 )
                 if text:
                     llm_used = True

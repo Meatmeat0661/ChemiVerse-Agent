@@ -61,6 +61,7 @@ def extract_plot_stats(
         else:
             trend = "roughly flat"
 
+        peak_idx = int(series.argmax())
         species_stats[name] = {
             "initial_abundance": y0,
             "final_abundance": y1,
@@ -68,6 +69,7 @@ def extract_plot_stats(
             "max_abundance": ymax,
             "abundance_change_orders": delta_orders,
             "trend": trend,
+            "time_at_peak_yr": float(times[peak_idx]),
         }
 
     return {

@@ -1017,14 +1017,12 @@ def _plot_image_label(img: dict) -> str:
     return label
 
 
-def _render_plot_explanation(text: str, *, llm_used: bool) -> None:
+def _render_plot_explanation(text: str) -> None:
     import html
 
-    source = "Westlake LLM" if llm_used else "rule-based summary"
     body = html.escape(text).replace("\n", "<br/>")
     st.markdown(
-        f'<div class="plot-explanation-card"><strong>About this plot</strong> '
-        f'<span style="opacity:0.75;font-size:0.85em">({source})</span><br/><br/>{body}</div>',
+        f'<div class="plot-explanation-card"><strong>About this plot</strong><br/><br/>{body}</div>',
         unsafe_allow_html=True,
     )
 
@@ -1179,7 +1177,6 @@ def show_plot_results(
             explanation_slots.append((label, st.empty()))
 
     explanations = plot_data.get("explanations") or {}
-    llm_used = bool(plot_data.get("explanation_llm_used"))
 
     if plot_data.get("explanation_error"):
         st.warning(f"Plot explanation: {plot_data['explanation_error']}")
@@ -1188,7 +1185,7 @@ def show_plot_results(
         caption_text = explanations.get(label)
         if caption_text:
             with slot:
-                _render_plot_explanation(caption_text, llm_used=llm_used)
+                _render_plot_explanation(caption_text)
 
 
 def page_simulation_local(nautilus, settings, allow_run_sim: bool = True) -> None:
